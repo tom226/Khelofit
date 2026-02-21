@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KheloFit — India's AI Health + Sports + Events Super App</title>
+    <meta name="description" content="Track Indian food calories with AI, find sports partners near you, book marathons & events. All in Hindi, Tamil, Telugu & 5 more languages. Join the waitlist!">
+    <meta name="keywords" content="health app india, calorie counter indian food, fitness app, cricket fitness, marathon booking, sports partner finder">
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="KheloFit — India's AI Health + Sports + Events Super App">
+    <meta property="og:description" content="Track dal chawal calories. Find cricket partners. Book marathons. All in your language.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://khelofit.com">
+    <meta property="og:image" content="/og-image.png">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="KheloFit — Khelo. Fit Raho. Jeeto.">
+    <meta name="twitter:description" content="India's first AI health + sports + events app. Join 10,000+ on the waitlist.">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar" id="navbar">
+        <div class="container nav-container">
+            <a href="#" class="logo">
+                <span class="logo-icon">🏏</span>
+                <span class="logo-text">Khelo<span class="logo-fit">Fit</span></span>
+            </a>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#how-it-works">How It Works</a>
+                <a href="#faq">FAQ</a>
+                <a href="#waitlist" class="btn btn-nav">Join Waitlist</a>
+            </div>
+            <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Menu">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Mobile Menu -->
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="#features" class="mobile-link">Features</a>
+        <a href="#how-it-works" class="mobile-link">How It Works</a>
+        <a href="#faq" class="mobile-link">FAQ</a>
+        <a href="#waitlist" class="btn btn-primary mobile-link">Join Waitlist</a>
+    </div>
+
+    <!-- Hero Section -->
+    <section class="hero" id="hero">
+        <div class="container hero-container">
+            <div class="hero-content">
+                <div class="badge">🇮🇳 Made for India, By India</div>
+                <h1>Your AI Health Coach.<br>Your Sports Community.<br>Your Event Hub.<br><span class="highlight">All in One App.</span></h1>
+                <p class="hero-subtitle">Track your <strong>dal chawal</strong> calories. Find <strong>cricket partners</strong> near you. Book <strong>marathons</strong> in 2 taps. All in <strong>Hindi, Tamil, Telugu</strong> & 5 more languages.</p>
+                
+                <!-- Waitlist Form (Hero) -->
+                <form class="waitlist-form hero-form" id="heroForm">
+                    <div class="form-row">
+                        <input type="tel" id="heroPhone" name="phone" placeholder="📱 Your phone number" pattern="[0-9]{10}" maxlength="10" required>
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            Join Waitlist — It's Free
+                            <span class="btn-arrow">→</span>
+                        </button>
+                    </div>
+                    <p class="form-note">🎁 First 10,000 get <strong>3 months FREE premium!</strong> No spam, ever.</p>
+                </form>
+
+                <!-- Social Proof -->
+                <div class="social-proof">
+                    <div class="avatars">
+                        <div class="avatar" style="background: #FF6B35;">R</div>
+                        <div class="avatar" style="background: #004E89;">P</div>
+                        <div class="avatar" style="background: #2DC653;">S</div>
+                        <div class="avatar" style="background: #FF6B35;">A</div>
+                        <div class="avatar" style="background: #004E89;">V</div>
+                    </div>
+                    <p><strong id="waitlistCount" class="waitlist-count">0</strong> fitness enthusiasts already joined</p>
+                </div>
+            </div>
+            <div class="hero-visual">
+                <div class="phone-mockup">
+                    <div class="phone-screen">
+                        <div class="mock-header">
+                            <span class="mock-greeting">Namaste, Rahul! 🙏</span>
+                            <span class="mock-score">Health Score: <strong>72</strong>/100</span>
+                        </div>
+                        <div class="mock-card food-card">
+                            <span class="mock-emoji">🍛</span>
+                            <div>
+                                <strong>Lunch logged</strong>
+                                <span>Dal Makhani + 2 Roti — 480 cal</span>
+                            </div>
+                        </div>
+                        <div class="mock-card sport-card">
+                            <span class="mock-emoji">🏏</span>
+                            <div>
+                                <strong>Cricket match nearby!</strong>
+                                <span>Sunday 8 AM • 2 spots left</span>
+                            </div>
+                        </div>
+                        <div class="mock-card event-card">
+                            <span class="mock-emoji">🏃</span>
+                            <div>
+                                <strong>Pune Marathon 2026</strong>
+                                <span>Early bird: ₹999 • 23 days left</span>
+                            </div>
+                        </div>
+                        <div class="mock-card ai-card">
+                            <span class="mock-emoji">🤖</span>
+                            <div>
+                                <strong>AI Coach</strong>
+                                <span>"Dinner mein ye khao weight loss ke liye..."</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Floating elements -->
+        <div class="float-element float-1">🏏</div>
+        <div class="float-element float-2">🧘</div>
+        <div class="float-element float-3">🏃</div>
+        <div class="float-element float-4">💪</div>
+    </section>
+
+    <!-- Stats Bar -->
+    <section class="stats-bar">
+        <div class="container stats-container">
+            <div class="stat">
+                <span class="stat-number">969M+</span>
+                <span class="stat-label">Internet Users in India</span>
+            </div>
+            <div class="stat">
+                <span class="stat-number">101M</span>
+                <span class="stat-label">Indians with Diabetes</span>
+            </div>
+            <div class="stat">
+                <span class="stat-number">200M+</span>
+                <span class="stat-label">Orphaned Dream11 Users</span>
+            </div>
+            <div class="stat">
+                <span class="stat-number">0</span>
+                <span class="stat-label">Apps That Combine All 3</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Problem Section -->
+    <section class="section problem-section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">The Problem</span>
+                <h2>Indians Need <span class="highlight">5-7 Apps</span> to Manage Health & Sports</h2>
+                <p>And none of them understand Indian food, Indian sports, or Indian languages.</p>
+            </div>
+            <div class="problem-grid">
+                <div class="problem-card">
+                    <span class="problem-icon">🍕</span>
+                    <h3>MyFitnessPal doesn't know Biryani</h3>
+                    <p>Global calorie apps can't identify roti, dal, dosa, or 50,000+ Indian dishes accurately.</p>
+                </div>
+                <div class="problem-card">
+                    <span class="problem-icon">🏏</span>
+                    <h3>No App Tracks Your Cricket</h3>
+                    <p>The world's 2nd most popular sport has ZERO meaningful fitness tracking for amateurs.</p>
+                </div>
+                <div class="problem-card">
+                    <span class="problem-icon">🗣️</span>
+                    <h3>Everything is in English</h3>
+                    <p>90% of India's next 500M users don't speak English. Where are their health apps?</p>
+                </div>
+                <div class="problem-card">
+                    <span class="problem-icon">🔍</span>
+                    <h3>Finding Sports Partners is Broken</h3>
+                    <p>Want to play cricket this Sunday? Good luck coordinating on 10 WhatsApp groups.</p>
+                </div>
+                <div class="problem-card">
+                    <span class="problem-icon">🎪</span>
+                    <h3>Events are Invisible</h3>
+                    <p>1,500+ running events/year in India, but you only discover them through random Instagram ads.</p>
+                </div>
+                <div class="problem-card">
+                    <span class="problem-icon">🧘</span>
+                    <h3>Ayurveda? What's That?</h3>
+                    <p>Modern fitness apps completely ignore India's 5,000-year health system that 70%+ Indians trust.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="section features-section" id="features">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">The Solution</span>
+                <h2>One App. <span class="highlight">Three Superpowers.</span></h2>
+                <p>KheloFit combines everything you need into one beautiful app.</p>
+            </div>
+
+            <!-- Pillar 1: Health -->
+            <div class="feature-block">
+                <div class="feature-content">
+                    <div class="pillar-badge health-badge">🏥 PILLAR 1</div>
+                    <h3>AI Health Coach</h3>
+                    <p class="feature-desc">India's smartest nutritionist — knows every Indian dish, speaks your language, costs less than a cup of chai per day.</p>
+                    <ul class="feature-list">
+                        <li>
+                            <span class="check">✅</span>
+                            <span><strong>50,000+ Indian foods</strong> — from dal makhani to filter coffee, every regional cuisine covered</span>
+                        </li>
+                        <li>
+                            <span class="check">✅</span>
+                            <span><strong>Photo food recognition</strong> — snap a photo of your thali, get instant calories</span>
+                        </li>
+                        <li>
+                            <span class="check">✅</span>
+                            <span><strong>AI chat in 8 languages</strong> — "Kya khaun dinner mein?" Ask in Hindi, get answers in Hindi</span>
+                        </li>
+                        <li>
+                            <span class="check">✅</span>
+                            <span><strong>Ayurveda integration</strong> — diet plans based on your Vata/Pitta/Kapha dosha</span>
+                        </li>
+                        <li>
+                            <span class="check">✅</span>
+                            <span><strong>Health Score (0-100)</strong> — one number to track your overall wellness</span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="feature-visual">
+                    <div class="feature-card-demo health-demo">
+                        <div class="demo-chat">
+                            <div class="chat-bubble user-bubble">
+                                Lunch mein biryani kha li, ab dinner mein kya khaun? 🍗
+                            </div>
+                            <div class="chat-bubble ai-bubble">
+                                <strong>KheloFit AI:</strong> Biryani mein ~450 cal tha. Dinner mein light raho:
+                                <br>• Moong dal + 1 roti (280 cal)
+                                <br>• Ya grilled paneer salad (220 cal)
+                                <br>Total day target: 1,800 cal ✅
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pillar 2: Sports -->
+            <div class="feature-block reverse">
+                <div class="feature-content">
+                    <div class="pillar-badge sports-badge">🏏 PILLAR 2</div>
+                    <h3>Sports Community</h3>
+                    <p class="feature-desc">Find players, track every sport, compete on leaderboards. Cricket, running, yoga, badminton — all tracked, all social.</p>
+                    <ul class="feature-list">
+                        <li>
+                            <span class="check">✅</span>
+                            <span><strong>10+ sports tracked</strong> — Cricket, running, yoga, badminton, gym, cycling, kabaddi & more</span>
+                        </li>
+                        <li>
+                            <span class="check">✅</span>
+                            <span><strong>Find players near you</strong> — "Need 4 for cricket Sunday 8 AM" → matched in seconds</span>
+                        </li>
+                        <li>
+                            <span class="check">✅</span>
+                            <span><strong>Cricket scorecard</strong> — log runs, wickets, catches — track your season stats</span>
+                        </li>
+                        <li>
+                            <span class="check">✅</span>
+                            <span><strong>City leaderboards</strong> — Top runners in Mumbai, top cricketers in Delhi</span>
+                        </li>
+                        <li>
+                            <span class="check">✅</span>
+                            <span><strong>Points & badges</strong> — earn KheloFit Points for every activity, redeem for rewards</span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="feature-visual">
+                    <div class="feature-card-demo sports-demo">
+                        <div class="match-card-ui">
+                            <div class="match-header">🏏 Cricket Match — Open</div>
+                            <div class="match-detail"><strong>📍</strong> Cubbon Park Ground, Bangalore</div>
+                            <div class="match-detail"><strong>📅</strong> Sunday, 8:00 AM - 10:00 AM</div>
+                            <div class="match-detail"><strong>👥</strong> 8/11 players joined</div>
+                            <div class="match-detail"><strong>🎯</strong> Intermediate level</div>
+                            <div class="match-players">
+                                <span class="player-dot" style="background: #FF6B35;">R</span>
+                                <span class="player-dot" style="background: #004E89;">A</span>
+                                <span class="player-dot" style="background: #2DC653;">S</span>
+                                <span class="player-dot" style="background: #FF6B35;">P</span>
+                                <span class="player-dot" style="background: #004E89;">V</span>
+                                <span class="player-dot" style="background: #2DC653;">K</span>
+                                <span class="player-dot" style="background: #FF6B35;">D</span>
+                                <span class="player-dot" style="background: #004E89;">M</span>
+                            </div>
+                            <button class="mock-btn">Join Match 🏏</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pillar 3: Events -->
+            <div class="feature-block">
+                <div class="feature-content">
+                    <div class="pillar-badge events-badge">🎪 PILLAR 3</div>
+                    <h3>Events Marketplace</h3>
+                    <p class="feature-desc">Discover marathons, yoga retreats, cricket tournaments, fitness workshops. Book in 2 taps. Never miss a fitness event again.</p>
+                    <ul class="feature-list">
+                        <li>
+                            <span class="check">✅</span>
+                            <span><strong>All events, one place</strong> — marathons, yoga retreats, cricket tournaments, fitness workshops</span>
+                        </li>
+                        <li>
+                            <span class="check">✅</span>
+                            <span><strong>2-tap booking</strong> — UPI, cards, wallets — pay instantly via Razorpay</span>
+                        </li>
+                        <li>
+                            <span class="check">✅</span>
+                            <span><strong>AI recommendations</strong> — "Based on your 10K pace, try the Pune Half Marathon"</span>
+                        </li>
+                        <li>
+                            <span class="check">✅</span>
+                            <span><strong>See who's going</strong> — your friends registered? Join them!</span>
+                        </li>
+                        <li>
+                            <span class="check">✅</span>
+                            <span><strong>Virtual events</strong> — can't travel? Join online yoga, virtual marathons</span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="feature-visual">
+                    <div class="feature-card-demo events-demo">
+                        <div class="event-card-ui">
+                            <div class="event-banner">🏃 PUNE INTERNATIONAL MARATHON 2026</div>
+                            <div class="event-info">
+                                <div class="event-row"><strong>📅</strong> March 15, 2026</div>
+                                <div class="event-row"><strong>📍</strong> Shivaji Park, Pune</div>
+                                <div class="event-row"><strong>⭐</strong> 4.8/5 (320 reviews)</div>
+                            </div>
+                            <div class="event-tickets">
+                                <div class="ticket">5K Fun Run — <strong>₹499</strong></div>
+                                <div class="ticket active-ticket">10K Run — <strong>₹999</strong> <span class="early-bird">Early Bird!</span></div>
+                                <div class="ticket">Half Marathon — <strong>₹1,999</strong></div>
+                            </div>
+                            <button class="mock-btn">Book Now — ₹999 🎫</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Language Section -->
+    <section class="section language-section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">For Every Indian</span>
+                <h2>Speaks <span class="highlight">Your Language</span></h2>
+                <p>Because health advice should come in the language you think in.</p>
+            </div>
+            <div class="language-grid">
+                <div class="lang-card active-lang">
+                    <span class="lang-native">हिन्दी</span>
+                    <span class="lang-name">Hindi</span>
+                </div>
+                <div class="lang-card active-lang">
+                    <span class="lang-native">English</span>
+                    <span class="lang-name">English</span>
+                </div>
+                <div class="lang-card">
+                    <span class="lang-native">தமிழ்</span>
+                    <span class="lang-name">Tamil</span>
+                </div>
+                <div class="lang-card">
+                    <span class="lang-native">తెలుగు</span>
+                    <span class="lang-name">Telugu</span>
+                </div>
+                <div class="lang-card">
+                    <span class="lang-native">বাংলা</span>
+                    <span class="lang-name">Bengali</span>
+                </div>
+                <div class="lang-card">
+                    <span class="lang-native">मराठी</span>
+                    <span class="lang-name">Marathi</span>
+                </div>
+                <div class="lang-card">
+                    <span class="lang-native">ಕನ್ನಡ</span>
+                    <span class="lang-name">Kannada</span>
+                </div>
+                <div class="lang-card">
+                    <span class="lang-native">ગુજરાતી</span>
+                    <span class="lang-name">Gujarati</span>
+                </div>
+                <div class="lang-card">
+                    <span class="lang-native">മലയാളം</span>
+                    <span class="lang-name">Malayalam</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="section how-section" id="how-it-works">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Simple as 1-2-3</span>
+                <h2>How <span class="highlight">KheloFit</span> Works</h2>
+            </div>
+            <div class="steps-grid">
+                <div class="step-card">
+                    <div class="step-number">1</div>
+                    <div class="step-icon">📱</div>
+                    <h3>Sign Up in 30 Seconds</h3>
+                    <p>Phone OTP, pick your language, set your goals. Our AI creates your personalized dashboard instantly.</p>
+                </div>
+                <div class="step-arrow">→</div>
+                <div class="step-card">
+                    <div class="step-number">2</div>
+                    <div class="step-icon">🍛</div>
+                    <h3>Track, Play & Discover</h3>
+                    <p>Log meals (snap a photo!), track sports activities, find players nearby, and discover local events.</p>
+                </div>
+                <div class="step-arrow">→</div>
+                <div class="step-card">
+                    <div class="step-number">3</div>
+                    <div class="step-icon">🏆</div>
+                    <h3>Get Fitter, Win Rewards</h3>
+                    <p>Earn KheloFit Points for every activity. Climb leaderboards. Redeem for event tickets & premium features.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Comparison Section -->
+    <section class="section comparison-section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Why KheloFit?</span>
+                <h2>What Makes Us <span class="highlight">Different</span></h2>
+            </div>
+            <div class="comparison-table-wrapper">
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Feature</th>
+                            <th>KheloFit</th>
+                            <th>HealthifyMe</th>
+                            <th>Cult.fit</th>
+                            <th>Strava</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Indian Food AI (50K+ items)</td>
+                            <td class="yes">✅</td>
+                            <td class="partial">⚠️ Limited</td>
+                            <td class="no">❌</td>
+                            <td class="no">❌</td>
+                        </tr>
+                        <tr>
+                            <td>Cricket Tracking</td>
+                            <td class="yes">✅</td>
+                            <td class="no">❌</td>
+                            <td class="no">❌</td>
+                            <td class="no">❌</td>
+                        </tr>
+                        <tr>
+                            <td>Find Sports Partners</td>
+                            <td class="yes">✅</td>
+                            <td class="no">❌</td>
+                            <td class="no">❌</td>
+                            <td class="no">❌</td>
+                        </tr>
+                        <tr>
+                            <td>Events Marketplace</td>
+                            <td class="yes">✅</td>
+                            <td class="no">❌</td>
+                            <td class="partial">⚠️ Own only</td>
+                            <td class="no">❌</td>
+                        </tr>
+                        <tr>
+                            <td>8 Indian Languages</td>
+                            <td class="yes">✅</td>
+                            <td class="partial">⚠️ Few</td>
+                            <td class="no">❌</td>
+                            <td class="no">❌</td>
+                        </tr>
+                        <tr>
+                            <td>Ayurveda Integration</td>
+                            <td class="yes">✅</td>
+                            <td class="no">❌</td>
+                            <td class="no">❌</td>
+                            <td class="no">❌</td>
+                        </tr>
+                        <tr>
+                            <td>Free Tier Available</td>
+                            <td class="yes">✅</td>
+                            <td class="partial">⚠️ Very limited</td>
+                            <td class="no">❌ ₹1,500+/mo</td>
+                            <td class="yes">✅</td>
+                        </tr>
+                        <tr>
+                            <td>GPS Run Tracking</td>
+                            <td class="yes">✅</td>
+                            <td class="no">❌</td>
+                            <td class="no">❌</td>
+                            <td class="yes">✅</td>
+                        </tr>
+                        <tr>
+                            <td>Price (Premium)</td>
+                            <td class="yes">₹299/mo</td>
+                            <td class="no">₹1,500+/mo</td>
+                            <td class="no">₹1,500+/mo</td>
+                            <td class="partial">₹500/mo</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Waitlist Section (Main CTA) -->
+    <section class="section waitlist-section" id="waitlist">
+        <div class="container">
+            <div class="waitlist-card">
+                <div class="section-header">
+                    <span class="section-tag">Be the First</span>
+                    <h2>Join the <span class="highlight">Waitlist</span></h2>
+                    <p>Get early access + 3 months FREE premium. The earlier you join, the higher your position.</p>
+                </div>
+                
+                <form class="waitlist-form main-form" id="mainForm">
+                    <div class="form-group">
+                        <label for="userName">Your Name</label>
+                        <input type="text" id="userName" name="name" placeholder="Rahul Sharma" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="userPhone">Phone Number</label>
+                        <div class="phone-input">
+                            <span class="country-code">+91</span>
+                            <input type="tel" id="userPhone" name="phone" placeholder="98XXXXXXXX" pattern="[0-9]{10}" maxlength="10" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="userEmail">Email (optional)</label>
+                        <input type="email" id="userEmail" name="email" placeholder="rahul@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="userCity">City</label>
+                        <select id="userCity" name="city" required>
+                            <option value="">Select your city</option>
+                            <option value="bangalore">Bangalore</option>
+                            <option value="mumbai">Mumbai</option>
+                            <option value="delhi">Delhi NCR</option>
+                            <option value="pune">Pune</option>
+                            <option value="hyderabad">Hyderabad</option>
+                            <option value="chennai">Chennai</option>
+                            <option value="kolkata">Kolkata</option>
+                            <option value="jaipur">Jaipur</option>
+                            <option value="ahmedabad">Ahmedabad</option>
+                            <option value="kochi">Kochi</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>What excites you most?</label>
+                        <div class="interest-tags">
+                            <label class="tag-option">
+                                <input type="checkbox" name="interests" value="health"> 
+                                <span class="tag">🏥 AI Health Coach</span>
+                            </label>
+                            <label class="tag-option">
+                                <input type="checkbox" name="interests" value="cricket"> 
+                                <span class="tag">🏏 Cricket Tracking</span>
+                            </label>
+                            <label class="tag-option">
+                                <input type="checkbox" name="interests" value="running"> 
+                                <span class="tag">🏃 Running & GPS</span>
+                            </label>
+                            <label class="tag-option">
+                                <input type="checkbox" name="interests" value="events"> 
+                                <span class="tag">🎪 Events & Marathons</span>
+                            </label>
+                            <label class="tag-option">
+                                <input type="checkbox" name="interests" value="matchmaking"> 
+                                <span class="tag">👥 Find Players</span>
+                            </label>
+                            <label class="tag-option">
+                                <input type="checkbox" name="interests" value="yoga"> 
+                                <span class="tag">🧘 Yoga & Ayurveda</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group referral-group" id="referralGroup" style="display:none;">
+                        <label for="referralCode">Referral Code (optional)</label>
+                        <input type="text" id="referralCode" name="referral" placeholder="e.g., RAHUL27">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-xl">
+                        🚀 Join the Waitlist — Get Early Access
+                    </button>
+                    <p class="form-note">No spam. Unsubscribe anytime. We respect your privacy.</p>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <!-- Success Modal -->
+    <div class="modal-overlay" id="successModal">
+        <div class="modal">
+            <div class="modal-icon">🎉</div>
+            <h2>You're on the list!</h2>
+            <p>Position <strong>#<span id="userPosition">0</span></strong> out of <strong><span id="totalWaitlist">0</span></strong></p>
+            <div class="referral-box">
+                <p>Move up the list! Share your referral code:</p>
+                <div class="referral-code-box">
+                    <span id="userReferralCode">XXXXXX</span>
+                    <button class="copy-btn" id="copyCode">Copy</button>
+                </div>
+                <div class="referral-rewards">
+                    <p>🏆 <strong>3 referrals</strong> → Jump 500 positions + 1 month free premium</p>
+                    <p>🏆 <strong>10 referrals</strong> → 3 months free + Legend badge</p>
+                    <p>🏆 <strong>25 referrals</strong> → 1 year free + Icon badge</p>
+                </div>
+                <div class="share-buttons">
+                    <a href="#" id="shareWhatsApp" class="share-btn whatsapp-btn" target="_blank">
+                        Share on WhatsApp
+                    </a>
+                    <a href="#" id="shareTwitter" class="share-btn twitter-btn" target="_blank">
+                        Share on Twitter/X
+                    </a>
+                </div>
+            </div>
+            <button class="btn btn-secondary" id="closeModal">Close</button>
+        </div>
+    </div>
+
+    <!-- FAQ Section -->
+    <section class="section faq-section" id="faq">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Questions?</span>
+                <h2>Frequently Asked <span class="highlight">Questions</span></h2>
+            </div>
+            <div class="faq-list">
+                <div class="faq-item">
+                    <button class="faq-question">
+                        <span>Is KheloFit free?</span>
+                        <span class="faq-toggle">+</span>
+                    </button>
+                    <div class="faq-answer">
+                        <p>Yes! KheloFit has a generous free tier that includes meal logging, basic activity tracking, step counter, event discovery, and finding sports partners (3/day). Premium features like unlimited AI coaching, advanced analytics, and wearable sync start at just ₹299/month — less than ₹10/day.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <button class="faq-question">
+                        <span>Which Indian foods does the AI recognize?</span>
+                        <span class="faq-toggle">+</span>
+                    </button>
+                    <div class="faq-answer">
+                        <p>All of them! We're launching with 50,000+ Indian food items covering North Indian, South Indian, Bengali, Gujarati, Rajasthani, Maharashtrian, Kerala, and every other regional cuisine. Plus street food, packaged food (Amul, Haldiram's, MTR), and restaurant chains. You can also snap a photo and our AI will identify the dish.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <button class="faq-question">
+                        <span>In which languages is KheloFit available?</span>
+                        <span class="faq-toggle">+</span>
+                    </button>
+                    <div class="faq-answer">
+                        <p>We're launching with Hindi and English, and adding Tamil, Telugu, Bengali, Marathi, Kannada, Gujarati, and Malayalam within the first 6 months. The AI health coach can chat fluently in all supported languages.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <button class="faq-question">
+                        <span>How does "Find Players" work?</span>
+                        <span class="faq-toggle">+</span>
+                    </button>
+                    <div class="faq-answer">
+                        <p>Select your sport (cricket, badminton, running, etc.), set your location and availability, and KheloFit shows you open match requests nearby. You can join existing games or create your own request. Once matched, you get a group chat to coordinate. After the game, log your scores and rate each other!</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <button class="faq-question">
+                        <span>When does KheloFit launch?</span>
+                        <span class="faq-toggle">+</span>
+                    </button>
+                    <div class="faq-answer">
+                        <p>We're targeting a beta launch in Bangalore in the next few months! Waitlist members get early access. The earlier you join, the higher your priority. First 10,000 waitlist members get 3 months of premium for FREE.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <button class="faq-question">
+                        <span>What about my data privacy?</span>
+                        <span class="faq-toggle">+</span>
+                    </button>
+                    <div class="faq-answer">
+                        <p>Your health data is encrypted with AES-256 and stored on servers in India (AWS Mumbai). We comply with India's DPDP Act 2023. You own your data — export or delete it anytime. We never sell your personal health information.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container footer-container">
+            <div class="footer-brand">
+                <div class="logo">
+                    <span class="logo-icon">🏏</span>
+                    <span class="logo-text">Khelo<span class="logo-fit">Fit</span></span>
+                </div>
+                <p class="footer-tagline">Khelo. Fit Raho. Jeeto. 🇮🇳</p>
+                <p class="footer-desc">India's AI-powered Health, Sports & Events Super App.</p>
+            </div>
+            <div class="footer-links">
+                <div class="footer-col">
+                    <h4>Product</h4>
+                    <a href="#features">Features</a>
+                    <a href="#how-it-works">How It Works</a>
+                    <a href="#waitlist">Join Waitlist</a>
+                    <a href="#faq">FAQ</a>
+                </div>
+                <div class="footer-col">
+                    <h4>Connect</h4>
+                    <a href="https://instagram.com/khelofit" target="_blank">Instagram</a>
+                    <a href="https://twitter.com/khelofit" target="_blank">Twitter / X</a>
+                    <a href="https://youtube.com/@khelofit" target="_blank">YouTube</a>
+                    <a href="https://linkedin.com/company/khelofit" target="_blank">LinkedIn</a>
+                </div>
+                <div class="footer-col">
+                    <h4>Legal</h4>
+                    <a href="#">Privacy Policy</a>
+                    <a href="#">Terms of Service</a>
+                    <a href="#">Refund Policy</a>
+                </div>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <div class="container">
+                <p>© 2026 KheloFit Technologies Pvt Ltd. All rights reserved. Made with ❤️ in India.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="/script.js"></script>
+</body>
+</html>
