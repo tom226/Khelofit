@@ -1,4 +1,4 @@
-const AI_MODEL = process.env.AI_MODEL || 'google/gemini-2.5-flash-preview:free';
+const AI_MODEL = process.env.AI_MODEL || 'qwen/qwen3-coder';
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
 async function chatCompletion(messages, options = {}) {
