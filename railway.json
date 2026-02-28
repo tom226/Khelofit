@@ -1,11 +1,11 @@
 {
   "build": {
-    "builder": "Node.js",
+    "builder": "heroku/nodejs", 
     "commands": {
       "build": "npm install"
     }
   },
-  "run": {
+  "deploy": {
     "commands": {
       "start": "node server/server.js"
     }
