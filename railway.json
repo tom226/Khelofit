@@ -1,0 +1,19 @@
+{
+  "build": {
+    "builder": "Node.js",
+    "commands": {
+      "build": "npm install"
+    }
+  },
+  "run": {
+    "commands": {
+      "start": "node server/server.js"
+    }
+  },
+  "env": {
+    "MONGODB_URI": {
+      "required": true
+    }
+  },
+  "port": 3000
+}

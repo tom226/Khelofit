@@ -51,11 +51,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // === SMOOTH SCROLL ===
     document.querySelectorAll('a[href^="#"]').forEach(link => {
         link.addEventListener('click', e => {
+            const href = link.getAttribute('href');
+            if (!href || href === '#' || !href.startsWith('#')) return;
+
+            const targetId = href.slice(1);
+            const target = document.getElementById(targetId);
+            if (!target) return;
+
             e.preventDefault();
-            const target = document.querySelector(link.getAttribute('href'));
-            if (target) {
-                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
     });
 

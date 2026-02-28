@@ -74,14 +74,13 @@ const waitlistSchema = new mongoose.Schema({
     timestamps: true
 });
 
-// Generate referral code before save
-waitlistSchema.pre('save', async function(next) {
+// Generate referral code and position before save
+waitlistSchema.pre('save', async function() {
     if (!this.referralCode) {
-        // Generate code: KF-XXXXX (5 alpha-numeric chars)
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
         let code;
         let attempts = 0;
-        
+
         do {
             code = 'KF-';
             for (let i = 0; i < 5; i++) {
@@ -89,25 +88,20 @@ waitlistSchema.pre('save', async function(next) {
             }
             attempts++;
         } while (
-            await mongoose.model('Waitlist').findOne({ referralCode: code }) && 
+            await this.constructor.findOne({ referralCode: code }) &&
             attempts < 10
         );
 
         this.referralCode = code;
     }
 
-    // Assign position
     if (!this.position) {
-        const count = await mongoose.model('Waitlist').countDocuments();
+        const count = await this.constructor.countDocuments();
         this.position = count + 1;
     }
-
-    next();
 });
 
-// Index for fast lookups
-waitlistSchema.index({ referralCode: 1 });
-waitlistSchema.index({ phone: 1 });
+// Index for fast lookups (avoid duplicates on unique fields already indexed)
 waitlistSchema.index({ referredBy: 1 });
 waitlistSchema.index({ referralCount: -1 });
 waitlistSchema.index({ createdAt: -1 });

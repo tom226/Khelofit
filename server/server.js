@@ -16,18 +16,23 @@ app.use(helmet({
 
 app.use(cors({
     origin: process.env.CORS_ORIGIN || '*',
-    methods: ['GET', 'POST']
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 }));
 
-// Rate limit: 10 signups per IP per 15 minutes
-const apiLimiter = rateLimit({
+const isProd = process.env.NODE_ENV === 'production';
+
+// Rate limit (disabled in dev)
+const noopLimiter = (req, res, next) => next();
+const apiLimiter = isProd ? rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 10,
+    max: 200, // relaxed but present in prod
+    standardHeaders: true,
+    legacyHeaders: false,
     message: {
         success: false,
         message: 'Too many requests. Please try again later.'
     }
-});
+}) : noopLimiter;
 
 // === BODY PARSING ===
 app.use(express.json({ limit: '10kb' }));
@@ -38,7 +43,21 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // === API ROUTES ===
 const waitlistRoutes = require('./routes/waitlist');
+const authRoutes = require('./routes/auth');
+const userRoutes = require('./routes/users');
 app.use('/api/waitlist', apiLimiter, waitlistRoutes);
+app.use('/api/auth', apiLimiter, authRoutes);
+app.use('/api/users', userRoutes);
+
+const foodsRoutes = require('./routes/foods');
+const mealsRoutes = require('./routes/meals');
+app.use('/api/foods', apiLimiter, foodsRoutes);
+app.use('/api/meals', apiLimiter, mealsRoutes);
+
+const activitiesRoutes = require('./routes/activities');
+const coachRoutes = require('./routes/coach');
+app.use('/api/activities', apiLimiter, activitiesRoutes);
+app.use('/api/coach', apiLimiter, coachRoutes);
 
 // === HEALTH CHECK ===
 app.get('/api/health', (req, res) => {

@@ -4,8 +4,26 @@ const Waitlist = require('../models/Waitlist');
 
 // POST /api/waitlist — Add to waitlist
 router.post('/', async (req, res) => {
+    let normalizedPhone = '';
     try {
-        const { name, phone, email, city, interests, referredBy, source } = req.body;
+        const { name, phone, email, city, interests, referredBy, source } = req.body || {};
+
+        const allowedInterests = new Set([
+            'health',
+            'cricket',
+            'running',
+            'events',
+            'matchmaking',
+            'yoga',
+            'sports',
+            'ai-coach',
+            'community',
+            'all'
+        ]);
+
+        const sanitizedInterests = Array.isArray(interests)
+            ? interests.filter(i => allowedInterests.has(i))
+            : [];
 
         // Check required fields
         if (!phone) {
@@ -16,7 +34,12 @@ router.post('/', async (req, res) => {
         }
 
         // Normalize phone
-        const normalizedPhone = phone.startsWith('+91') ? phone : `+91${phone}`;
+        const cleaned = String(phone).replace(/\D/g, '');
+        normalizedPhone = cleaned.startsWith('91') && cleaned.length === 12
+            ? `+${cleaned}`
+            : cleaned.length === 10
+                ? `+91${cleaned}`
+                : phone;
 
         // Check if already registered
         const existing = await Waitlist.findOne({ phone: normalizedPhone });
@@ -36,7 +59,7 @@ router.post('/', async (req, res) => {
             phone: normalizedPhone,
             email: email || '',
             city: city || '',
-            interests: interests || [],
+            interests: sanitizedInterests,
             referredBy: referredBy || '',
             source: source || 'main_form',
             ipAddress: req.ip,
@@ -61,11 +84,12 @@ router.post('/', async (req, res) => {
         });
 
     } catch (err) {
-        console.error('Waitlist Error:', err.message);
+        console.error('Waitlist Error:', err);
 
-        // Duplicate key error
+        // Duplicate key error (phone or referralCode)
         if (err.code === 11000) {
-            const existing = await Waitlist.findOne({ phone: req.body.phone });
+            const existing = await Waitlist.findOne({ phone: normalizedPhone })
+                || await Waitlist.findOne({ referralCode: (req.body?.referralCode || '').toUpperCase() });
             if (existing) {
                 return res.json({
                     success: true,
@@ -75,6 +99,12 @@ router.post('/', async (req, res) => {
                     alreadyExists: true
                 });
             }
+        }
+
+        // Validation errors
+        if (err.name === 'ValidationError') {
+            const messages = Object.values(err.errors || {}).map(e => e.message);
+            return res.status(400).json({ success: false, message: messages[0] || 'Invalid data' });
         }
 
         res.status(500).json({
