@@ -37,13 +37,12 @@ const bookingSchema = new mongoose.Schema({
 });
 
 // Generate ticket ID before saving
-bookingSchema.pre('save', function (next) {
+bookingSchema.pre('save', function () {
     if (!this.ticketId) {
         const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
         const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
         this.ticketId = `KF-${datePart}-${rand}`;
     }
-    next();
 });
 
 bookingSchema.index({ userId: 1, eventId: 1 }, { unique: true });

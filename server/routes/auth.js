@@ -2,6 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { OAuth2Client } = require('google-auth-library');
 const router = express.Router();
 
 const Otp = require('../models/Otp');
@@ -11,6 +12,11 @@ const { authRequired } = require('../middleware/auth');
 const OTP_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const JWT_SECRET = process.env.JWT_SECRET || 'khelofit-dev-secret-change-me';
 const JWT_EXPIRES_IN = '30d';
+const GOOGLE_WEB_CLIENT_ID = process.env.GOOGLE_WEB_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '';
+const GOOGLE_ANDROID_CLIENT_ID = process.env.GOOGLE_ANDROID_CLIENT_ID || '';
+const GOOGLE_IOS_CLIENT_ID = process.env.GOOGLE_IOS_CLIENT_ID || '';
+const GOOGLE_AUDIENCES = [GOOGLE_WEB_CLIENT_ID, GOOGLE_ANDROID_CLIENT_ID, GOOGLE_IOS_CLIENT_ID].filter(Boolean);
+const googleClient = GOOGLE_AUDIENCES.length ? new OAuth2Client() : null;
 
 const hasTwilio = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM;
 const hasMsg91 = process.env.MSG91_AUTHKEY && process.env.MSG91_TEMPLATE_ID && process.env.MSG91_SENDER;
@@ -48,6 +54,15 @@ function generateOtp() {
 
 function signJwt(userId, phone) {
     return jwt.sign({ userId, phone }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+}
+
+async function verifyGoogleCredential(credential) {
+    if (!googleClient) throw new Error('Google login is not configured on server');
+    const ticket = await googleClient.verifyIdToken({
+        idToken: credential,
+        audience: GOOGLE_AUDIENCES
+    });
+    return ticket.getPayload();
 }
 
 async function sendSmsOtp(to, code) {
@@ -171,7 +186,7 @@ router.post('/send-otp', async (req, res) => {
         const otpDoc = await Otp.findOneAndUpdate(
             { phone: normalizedPhone },
             { code, expiresAt, attempts: 0 },
-            { upsert: true, new: true }
+            { upsert: true, returnDocument: 'after' }
         );
 
         const results = await Promise.all([
@@ -194,7 +209,7 @@ router.post('/send-otp', async (req, res) => {
                 sportsPrefs: Array.isArray(sportsPrefs) ? sportsPrefs : [],
                 email: email || ''
             },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
+            { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
         );
 
         res.json({ success: true, message: 'OTP sent', smsSent, emailSent, ttlMs: OTP_TTL_MS, otpId: otpDoc?._id });
@@ -229,9 +244,10 @@ router.post('/register-email', async (req, res) => {
             {
                 email: normalizedEmail,
                 name: name || '',
-                passwordHash
+                passwordHash,
+                authProvider: 'email'
             },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
+            { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
         );
 
         const token = signJwt(user._id, user.phone || undefined);
@@ -267,6 +283,60 @@ router.post('/login-email', async (req, res) => {
     } catch (err) {
         console.error('Login Email Error:', err.message);
         res.status(500).json({ success: false, message: 'Server error' });
+    }
+});
+
+// GET /api/auth/google-config
+router.get('/google-config', async (req, res) => {
+    res.json({
+        success: true,
+        enabled: GOOGLE_AUDIENCES.length > 0,
+        clientId: GOOGLE_WEB_CLIENT_ID || '',
+        webClientId: GOOGLE_WEB_CLIENT_ID || '',
+        androidClientId: GOOGLE_ANDROID_CLIENT_ID || '',
+        iosClientId: GOOGLE_IOS_CLIENT_ID || '',
+        nativeEnabled: Boolean(GOOGLE_ANDROID_CLIENT_ID || GOOGLE_IOS_CLIENT_ID)
+    });
+});
+
+// POST /api/auth/google-login
+router.post('/google-login', async (req, res) => {
+    try {
+        const credential = req.body?.credential || req.body?.idToken;
+        if (!credential) {
+            return res.status(400).json({ success: false, message: 'Google ID token is required' });
+        }
+
+        const payload = await verifyGoogleCredential(credential);
+        const email = String(payload?.email || '').trim().toLowerCase();
+        const name = String(payload?.name || '').trim();
+        const picture = String(payload?.picture || '').trim();
+        const emailVerified = Boolean(payload?.email_verified);
+
+        if (!email || !emailVerified) {
+            return res.status(400).json({ success: false, message: 'Google account email is not verified' });
+        }
+
+        const user = await User.findOneAndUpdate(
+            { email },
+            {
+                email,
+                name: name || undefined,
+                googlePicture: picture || undefined,
+                authProvider: 'google'
+            },
+            { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
+        );
+
+        const token = signJwt(user._id, user.phone || undefined);
+        res.json({
+            success: true,
+            user: { id: user._id, email: user.email, name: user.name || '' },
+            token
+        });
+    } catch (err) {
+        console.error('Google Login Error:', err.message);
+        res.status(500).json({ success: false, message: 'Google login failed' });
     }
 });
 
@@ -309,7 +379,7 @@ router.post('/verify-otp', async (req, res) => {
                 sportsPrefs: Array.isArray(sportsPrefs) ? sportsPrefs : undefined,
                 email: email || undefined
             },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
+            { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
         ).lean();
 
         // Clean up OTP

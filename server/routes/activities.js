@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authRequired } = require('../middleware/auth');
 const Activity = require('../models/Activity');
+const { safeNotify } = require('../utils/notifications');
 
 // POST /api/activities — log an activity
 router.post('/', authRequired, async (req, res) => {
@@ -18,6 +19,13 @@ router.post('/', authRequired, async (req, res) => {
       gpsRoute: gpsRoute || []
     });
     await activity.save();
+    await safeNotify({
+      userId: req.userId,
+      type: 'activity',
+      title: 'Activity logged',
+      message: `${type} recorded for ${durationMinutes || 0} minutes.`,
+      data: { activityId: activity._id, type, durationMinutes }
+    });
     res.status(201).json(activity);
   } catch (err) {
     res.status(500).json({ error: 'Failed to log activity', details: err.message });

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>KheloFit — Your Fitness Companion</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Old sidebar kept hidden for JS compat -->
+    <aside class="sidebar">
+      <div class="brand">⚡ KheloFit</div>
+      <button class="nav-link active" data-view="dashboard">Dashboard</button>
+      <button class="nav-link" data-view="onboarding">Onboarding</button>
+      <button class="nav-link" data-view="profile">Profile</button>
+      <button class="nav-link" data-view="meals">Meals</button>
+      <button class="nav-link" data-view="activities">Activities</button>
+      <button class="nav-link" data-view="coach">AI Coach</button>
+      <button class="nav-link" data-view="matches">Matches</button>
+      <button class="nav-link" data-view="events">Events</button>
+      <button class="nav-link" data-view="referrals">Referrals</button>
+      <button class="nav-link" data-view="notifications">Notifications</button>
+      <button class="nav-link" data-view="status">System Status</button>
+      <button id="logoutBtn" class="nav-link nav-danger">Logout</button>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="row-inline" style="gap:8px">
+          <span style="font-size:1.05rem;line-height:1;opacity:0.7">⚡</span>
+          <h1 id="screenTitle" style="font-size:1rem;font-weight:700;letter-spacing:0.01em">Dashboard</h1>
+        </div>
+        <div class="row-inline">
+          <span id="userChip" class="chip hidden">Guest</span>
+          <a class="landing-link" href="/">Home</a>
+        </div>
+      </header>
+
+      <!-- Auth Panel -->
+      <section id="authPanel" class="card">
+        <h2>Welcome to KheloFit ⚡</h2>
+        <div class="tabs">
+          <button id="loginTab" class="tab active">Login</button>
+          <button id="registerTab" class="tab">Register</button>
+        </div>
+        <form id="emailForm" class="form-grid">
+          <input id="nameInput" placeholder="Your name (for register)" />
+          <input id="emailInput" type="email" placeholder="Email address" required />
+          <input id="passwordInput" type="password" placeholder="Password (min 8 chars)" required />
+          <button id="emailSubmit" class="btn btn-primary" type="submit" style="width:100%;padding:14px;">Login</button>
+        </form>
+        <p class="sep">or continue with Gmail</p>
+        <div id="googleLoginWrap" class="row-inline" style="justify-content:center;"></div>
+        <p id="googleHint" class="muted" style="text-align:center;"></p>
+      </section>
+
+      <!-- Views -->
+      <section id="dashboard" class="view"></section>
+      <section id="onboarding" class="view hidden"></section>
+      <section id="profile" class="view hidden"></section>
+      <section id="meals" class="view hidden"></section>
+      <section id="activities" class="view hidden"></section>
+      <section id="coach" class="view hidden"></section>
+      <section id="matches" class="view hidden"></section>
+      <section id="events" class="view hidden"></section>
+      <section id="referrals" class="view hidden"></section>
+      <section id="notifications" class="view hidden"></section>
+      <section id="status" class="view hidden"></section>
+    </main>
+
+    <!-- Bottom Navigation -->
+    <nav class="bottom-nav">
+      <button class="nav-link active" data-view="dashboard">
+        <span class="nav-icon">⊞</span>
+        Home
+      </button>
+      <button class="nav-link" data-view="meals">
+        <span class="nav-icon">🥗</span>
+        Meals
+      </button>
+      <button class="nav-link" data-view="activities">
+        <span class="nav-icon">⚡</span>
+        Activity
+      </button>
+      <button class="nav-link" data-view="events">
+        <span class="nav-icon">📍</span>
+        Events
+      </button>
+      <button class="nav-link" data-view="coach">
+        <span class="nav-icon">✦</span>
+        Coach
+      </button>
+      <button class="nav-link" data-view="profile">
+        <span class="nav-icon">◎</span>
+        Profile
+      </button>
+    </nav>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <div id="confettiContainer" class="confetti-container"></div>
+  <button class="dark-toggle" id="darkToggle" title="Toggle dark mode">🌙</button>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+    }
+  </script>
+  <script src="/app.js"></script>
+</body>
+</html>

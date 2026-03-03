@@ -8,6 +8,8 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const User = require('./models/User');
+const { startReminderScheduler } = require('./utils/reminders');
 
 // === SECURITY MIDDLEWARE ===
 app.use(helmet({
@@ -56,8 +58,22 @@ app.use('/api/meals', apiLimiter, mealsRoutes);
 
 const activitiesRoutes = require('./routes/activities');
 const coachRoutes = require('./routes/coach');
+const matchesRoutes = require('./routes/matches');
+const eventsRoutes = require('./routes/events');
+const referralsRoutes = require('./routes/referrals');
+const notificationsRoutes = require('./routes/notifications');
+const insightsRoutes = require('./routes/insights');
+const pushRoutes = require('./routes/push');
+const healthRoutes = require('./routes/health');
 app.use('/api/activities', apiLimiter, activitiesRoutes);
 app.use('/api/coach', apiLimiter, coachRoutes);
+app.use('/api/matches', apiLimiter, matchesRoutes);
+app.use('/api/events', apiLimiter, eventsRoutes);
+app.use('/api/referrals', apiLimiter, referralsRoutes);
+app.use('/api/notifications', apiLimiter, notificationsRoutes);
+app.use('/api/insights', apiLimiter, insightsRoutes);
+app.use('/api/push', apiLimiter, pushRoutes);
+app.use('/api', healthRoutes);
 
 // === HEALTH CHECK ===
 app.get('/api/health', (req, res) => {
@@ -66,6 +82,11 @@ app.get('/api/health', (req, res) => {
         app: 'KheloFit Waitlist',
         timestamp: new Date().toISOString()
     });
+});
+
+// === USER APP ROUTE ===
+app.get('/app', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', 'app.html'));
 });
 
 // === SPA FALLBACK ===
@@ -77,11 +98,18 @@ app.use((req, res) => {
 const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/khelofit';
 
 mongoose.connect(MONGO_URI)
-    .then(() => {
+    .then(async () => {
         console.log('✅ MongoDB connected successfully');
+        try {
+            await User.syncIndexes();
+            console.log('✅ User indexes synced');
+        } catch (indexErr) {
+            console.warn('⚠️ User index sync warning:', indexErr.message);
+        }
         app.listen(PORT, () => {
             console.log(`🚀 KheloFit server running at http://localhost:${PORT}`);
             console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
+            startReminderScheduler();
         });
     })
     .catch(err => {

@@ -20,7 +20,7 @@ router.get('/profile', authRequired, async (req, res) => {
 // PUT /api/users/profile — Update my profile
 router.put('/profile', authRequired, async (req, res) => {
     try {
-        const allowed = ['name', 'language', 'city', 'sportsPrefs', 'goals'];
+        const allowed = ['name', 'language', 'city', 'sportsPrefs', 'goals', 'healthProfile', 'integrations'];
         const updates = {};
         for (const key of allowed) {
             if (req.body[key] !== undefined) {
@@ -35,7 +35,7 @@ router.put('/profile', authRequired, async (req, res) => {
         const user = await User.findByIdAndUpdate(
             req.userId,
             { $set: updates },
-            { new: true, runValidators: true }
+            { returnDocument: 'after', runValidators: true }
         ).lean();
 
         if (!user) {
