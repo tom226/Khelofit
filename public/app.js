@@ -12,10 +12,17 @@ const state = {
   darkMode: localStorage.getItem('kf_dark') === '1',
 };
 
-const API_BASE = window.location.origin;
+const API_BASE = (() => {
+  try {
+    if (window?.Capacitor?.isNativePlatform?.()) {
+      return 'https://khelofit-web-production.up.railway.app';
+    }
+  } catch (_) {
+  }
+  return window.location.origin;
+})();
 
 const el = (id) => document.getElementById(id);
-const q = (selector) => document.querySelector(selector);
 const qa = (selector) => Array.from(document.querySelectorAll(selector));
 
 const activityTracker = {
@@ -31,7 +38,207 @@ const activityTracker = {
   route: [],
   lastPoint: null,
   type: 'walking',
+  // improved step detection
+  magHistory: [],
+  filteredMag: 9.8,
+  stepThreshold: 1.2,
+  stepRefractory: 280,
+  lastValley: 9.8,
+  rising: false,
+  map: null,
+  mapReady: false,
+  livePolyline: null,
+  plannedPolyline: null,
+  routeMarkers: [],
+  currentMarker: null,
+  plannedRoute: [],
+  routeBuilderEnabled: false,
 };
+
+const ACTIVITY_LOCAL_KEY = 'kf_activity_local_v1';
+const ACTIVITY_SYNC_QUEUE_KEY = 'kf_activity_sync_queue_v1';
+
+function readArrayFromStorage(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function writeArrayToStorage(key, list) {
+  try {
+    localStorage.setItem(key, JSON.stringify(Array.isArray(list) ? list : []));
+  } catch (_) {
+  }
+}
+
+function getLocalActivities() {
+  return readArrayFromStorage(ACTIVITY_LOCAL_KEY)
+    .filter((item) => item && typeof item === 'object')
+    .sort((a, b) => new Date(b.createdAt || b.date || 0).getTime() - new Date(a.createdAt || a.date || 0).getTime());
+}
+
+function saveLocalActivities(list) {
+  writeArrayToStorage(ACTIVITY_LOCAL_KEY, list);
+}
+
+function upsertLocalActivity(activity) {
+  const current = getLocalActivities();
+  const incoming = { ...activity };
+  if (!incoming.localId) incoming.localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const idx = current.findIndex((item) => item.localId && item.localId === incoming.localId);
+  if (idx >= 0) {
+    current[idx] = { ...current[idx], ...incoming };
+  } else {
+    current.unshift(incoming);
+  }
+  saveLocalActivities(current.slice(0, 200));
+  return incoming;
+}
+
+function getActivitySyncQueue() {
+  return readArrayFromStorage(ACTIVITY_SYNC_QUEUE_KEY)
+    .filter((item) => item && typeof item === 'object' && item.payload);
+}
+
+function saveActivitySyncQueue(queue) {
+  writeArrayToStorage(ACTIVITY_SYNC_QUEUE_KEY, queue);
+}
+
+function queueActivityForSync(localId, payload) {
+  const queue = getActivitySyncQueue();
+  const idx = queue.findIndex((item) => item.localId === localId);
+  const queued = {
+    localId,
+    payload,
+    queuedAt: new Date().toISOString(),
+    retryCount: idx >= 0 ? Number(queue[idx].retryCount || 0) : 0,
+  };
+  if (idx >= 0) {
+    queue[idx] = queued;
+  } else {
+    queue.push(queued);
+  }
+  saveActivitySyncQueue(queue);
+}
+
+function removeQueuedActivity(localId) {
+  const queue = getActivitySyncQueue().filter((item) => item.localId !== localId);
+  saveActivitySyncQueue(queue);
+}
+
+function markLocalActivitySynced(localId) {
+  const list = getLocalActivities();
+  const idx = list.findIndex((item) => item.localId === localId);
+  if (idx >= 0) {
+    list[idx] = {
+      ...list[idx],
+      pendingSync: false,
+      syncedAt: new Date().toISOString(),
+      syncError: '',
+    };
+    saveLocalActivities(list);
+  }
+}
+
+function markLocalActivitySyncError(localId, message) {
+  const list = getLocalActivities();
+  const idx = list.findIndex((item) => item.localId === localId);
+  if (idx >= 0) {
+    list[idx] = {
+      ...list[idx],
+      pendingSync: true,
+      syncError: message || 'Sync pending',
+    };
+    saveLocalActivities(list);
+  }
+}
+
+function mergeActivitiesForView(remoteActivities, localActivities) {
+  const merged = [];
+  const seen = new Set();
+
+  (remoteActivities || []).forEach((activity) => {
+    const key = activity?._id || `${activity?.date || ''}|${activity?.type || ''}|${activity?.durationMinutes || 0}|${activity?.caloriesBurned || 0}`;
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    merged.push({ ...activity, pendingSync: false, localOnly: false });
+  });
+
+  (localActivities || []).forEach((activity) => {
+    const key = activity?.serverId || activity?._id || `${activity?.date || ''}|${activity?.type || ''}|${activity?.durationMinutes || 0}|${activity?.caloriesBurned || 0}`;
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    merged.push({ ...activity, localOnly: true });
+  });
+
+  return merged.sort((a, b) => new Date(b.createdAt || b.date || 0).getTime() - new Date(a.createdAt || a.date || 0).getTime());
+}
+
+function computeActivityStatsFromList(activities) {
+  const list = Array.isArray(activities) ? activities : [];
+  const totalMinutes = list.reduce((sum, item) => sum + Number(item.durationMinutes || 0), 0);
+  const totalCalories = list.reduce((sum, item) => sum + Number(item.caloriesBurned || 0), 0);
+  const totalDistance = list.reduce((sum, item) => sum + Number(item.distanceKm || 0), 0);
+  const totalSteps = list.reduce((sum, item) => sum + Number(item.steps || 0), 0);
+  const lastActivityType = list[0]?.type || '';
+  const uniqueDays = new Set(list.map((item) => String(item.date || '').slice(0, 10)).filter(Boolean));
+  return {
+    totalMinutes,
+    totalCalories,
+    totalDistance: Number(totalDistance.toFixed(2)),
+    totalSteps,
+    sessionCount: list.length,
+    streak: uniqueDays.size,
+    lastActivityType,
+  };
+}
+
+async function syncQueuedActivities(showToast = false) {
+  if (!state.token) return { synced: 0, remaining: getActivitySyncQueue().length };
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return { synced: 0, remaining: getActivitySyncQueue().length };
+  }
+
+  const queue = getActivitySyncQueue();
+  if (!queue.length) return { synced: 0, remaining: 0 };
+
+  let synced = 0;
+  let blocked = false;
+
+  for (let i = 0; i < queue.length; i += 1) {
+    const item = queue[i];
+    if (blocked) break;
+    try {
+      await api('/api/activities', { method: 'POST', body: JSON.stringify(item.payload) });
+      removeQueuedActivity(item.localId);
+      markLocalActivitySynced(item.localId);
+      synced += 1;
+    } catch (err) {
+      markLocalActivitySyncError(item.localId, err.message || 'Sync pending');
+      const updatedQueue = getActivitySyncQueue();
+      const idx = updatedQueue.findIndex((entry) => entry.localId === item.localId);
+      if (idx >= 0) {
+        updatedQueue[idx] = {
+          ...updatedQueue[idx],
+          retryCount: Number(updatedQueue[idx].retryCount || 0) + 1,
+          lastError: err.message || 'Request failed',
+          lastTriedAt: new Date().toISOString(),
+        };
+        saveActivitySyncQueue(updatedQueue);
+      }
+      blocked = true;
+    }
+  }
+
+  const remaining = getActivitySyncQueue().length;
+  if (showToast && synced > 0) toast(`Synced ${synced} offline activit${synced === 1 ? 'y' : 'ies'}`);
+  return { synced, remaining };
+}
 
 function toRad(value) {
   return (value * Math.PI) / 180;
@@ -47,6 +254,214 @@ function distanceBetweenMeters(a, b) {
   const h = Math.sin(dLat / 2) ** 2
     + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return 2 * earthRadius * Math.asin(Math.sqrt(h));
+}
+
+function plannedRouteDistanceKm(points) {
+  if (!Array.isArray(points) || points.length < 2) return 0;
+  let meters = 0;
+  for (let i = 1; i < points.length; i += 1) {
+    meters += distanceBetweenMeters(points[i - 1], points[i]);
+  }
+  return Number((meters / 1000).toFixed(2));
+}
+
+function clearRouteMarkers() {
+  if (!activityTracker.map || !Array.isArray(activityTracker.routeMarkers)) return;
+  activityTracker.routeMarkers.forEach((marker) => {
+    try { marker.remove(); } catch (_) {}
+  });
+  activityTracker.routeMarkers = [];
+}
+
+function updateRouteBuilderUi() {
+  const countNode = el('rbPointCount');
+  const kmNode = el('rbPlanKm');
+  const modeNode = el('rbMode');
+  const useBtn = el('usePlannedDistanceBtn');
+  const smartBtn = el('buildRoadRouteBtn');
+  const clearBtn = el('clearRouteBtn');
+
+  const count = activityTracker.plannedRoute.length;
+  const km = plannedRouteDistanceKm(activityTracker.plannedRoute);
+  if (countNode) countNode.textContent = String(count);
+  if (kmNode) kmNode.textContent = km.toFixed(2);
+  if (modeNode) modeNode.textContent = activityTracker.routeBuilderEnabled ? 'Tap map to add waypoints' : 'Builder is off';
+  if (useBtn) useBtn.disabled = count < 2;
+  if (smartBtn) smartBtn.disabled = count < 2;
+  if (clearBtn) clearBtn.disabled = count < 1;
+}
+
+function drawPlannedRouteOnMap() {
+  if (!activityTracker.map || !window.L) return;
+  if (activityTracker.plannedPolyline) {
+    try { activityTracker.plannedPolyline.remove(); } catch (_) {}
+    activityTracker.plannedPolyline = null;
+  }
+
+  clearRouteMarkers();
+
+  const routeLatLngs = activityTracker.plannedRoute.map((p) => [p.lat, p.lng]);
+  if (routeLatLngs.length >= 2) {
+    activityTracker.plannedPolyline = window.L.polyline(routeLatLngs, {
+      color: '#3B7EFE',
+      weight: 4,
+      opacity: 0.85,
+      dashArray: '6,8',
+    }).addTo(activityTracker.map);
+  }
+
+  routeLatLngs.forEach((latLng, idx) => {
+    const marker = window.L.circleMarker(latLng, {
+      radius: idx === 0 || idx === routeLatLngs.length - 1 ? 6 : 4,
+      color: '#1C1F2A',
+      weight: 2,
+      fillColor: idx === 0 ? '#25C569' : idx === routeLatLngs.length - 1 ? '#FF6B2B' : '#3B7EFE',
+      fillOpacity: 0.95,
+    }).addTo(activityTracker.map);
+    activityTracker.routeMarkers.push(marker);
+  });
+
+  if (routeLatLngs.length >= 2) {
+    try {
+      activityTracker.map.fitBounds(activityTracker.plannedPolyline.getBounds(), { padding: [20, 20] });
+    } catch (_) {}
+  }
+
+  updateRouteBuilderUi();
+}
+
+function drawLiveRouteOnMap() {
+  if (!activityTracker.map || !window.L) return;
+
+  const liveLatLngs = activityTracker.route.map((p) => [p.lat, p.lng]);
+  if (activityTracker.livePolyline) {
+    try { activityTracker.livePolyline.remove(); } catch (_) {}
+    activityTracker.livePolyline = null;
+  }
+
+  if (liveLatLngs.length >= 2) {
+    activityTracker.livePolyline = window.L.polyline(liveLatLngs, {
+      color: '#25C569',
+      weight: 5,
+      opacity: 0.95,
+    }).addTo(activityTracker.map);
+  }
+
+  const last = activityTracker.lastPoint;
+  if (last) {
+    if (activityTracker.currentMarker) {
+      try { activityTracker.currentMarker.remove(); } catch (_) {}
+      activityTracker.currentMarker = null;
+    }
+    activityTracker.currentMarker = window.L.circleMarker([last.lat, last.lng], {
+      radius: 7,
+      color: '#FFFFFF',
+      weight: 2,
+      fillColor: '#25C569',
+      fillOpacity: 1,
+    }).addTo(activityTracker.map);
+  }
+}
+
+function routeProfileFromType(type) {
+  if (type === 'cycling') return 'cycling';
+  if (type === 'walking' || type === 'running') return 'foot';
+  return 'foot';
+}
+
+async function buildRoadRouteFromWaypoints() {
+  const points = activityTracker.plannedRoute;
+  if (!Array.isArray(points) || points.length < 2) {
+    toast('Add at least 2 waypoints');
+    return;
+  }
+
+  const profile = routeProfileFromType(String(el('actType')?.value || activityTracker.type || 'walking').toLowerCase());
+  const coordinates = points.map((p) => `${p.lng},${p.lat}`).join(';');
+  const url = `https://router.project-osrm.org/route/v1/${profile}/${coordinates}?overview=full&geometries=geojson`;
+
+  const btn = el('buildRoadRouteBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Building...';
+  }
+
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    const coords = data?.routes?.[0]?.geometry?.coordinates || [];
+    if (!coords.length) throw new Error('No route generated');
+    activityTracker.plannedRoute = coords.map((entry) => ({
+      lng: Number(entry[0]),
+      lat: Number(entry[1]),
+      timestamp: new Date().toISOString(),
+    }));
+    drawPlannedRouteOnMap();
+    toast('Road route ready');
+  } catch (_) {
+    toast('Smart route unavailable. Using straight-line route.');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Smart Route';
+    }
+    updateRouteBuilderUi();
+  }
+}
+
+function clearPlannedRoute() {
+  activityTracker.plannedRoute = [];
+  drawPlannedRouteOnMap();
+}
+
+function initActivityMap() {
+  const mapNode = el('trkMap');
+  const mapStatus = el('rbMapStatus');
+  if (!mapNode) return;
+
+  if (!window.L) {
+    if (mapStatus) mapStatus.textContent = 'Map library unavailable. Check internet and reload.';
+    return;
+  }
+
+  if (!activityTracker.map) {
+    activityTracker.map = window.L.map(mapNode, {
+      zoomControl: true,
+      attributionControl: true,
+    }).setView([12.9716, 77.5946], 13);
+
+    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(activityTracker.map);
+
+    activityTracker.map.on('click', (event) => {
+      if (!activityTracker.routeBuilderEnabled) return;
+      const point = {
+        lat: Number(event.latlng.lat),
+        lng: Number(event.latlng.lng),
+        timestamp: new Date().toISOString(),
+      };
+      activityTracker.plannedRoute.push(point);
+      drawPlannedRouteOnMap();
+    });
+
+    activityTracker.mapReady = true;
+  }
+
+  setTimeout(() => {
+    try { activityTracker.map.invalidateSize(); } catch (_) {}
+    drawPlannedRouteOnMap();
+    drawLiveRouteOnMap();
+  }, 60);
+
+  if (mapStatus) {
+    mapStatus.textContent = activityTracker.routeBuilderEnabled
+      ? 'Builder ON: tap map to add waypoints.'
+      : 'Builder OFF: enable builder to design route.';
+  }
+
+  updateRouteBuilderUi();
 }
 
 function getMetForType(type) {
@@ -265,14 +680,14 @@ function getBMICategory(bmi) {
 function computeBadges(user, mealSummary, activityStats) {
   const badges = [
     { id: 'first-meal', icon: '🍽️', name: 'First Meal', unlocked: (mealSummary?.totalCalories || 0) > 0 },
-    { id: 'first-workout', icon: '💪', name: 'First Workout', unlocked: (activityStats?.sessionsCount || 0) > 0 },
+    { id: 'first-workout', icon: '💪', name: 'First Workout', unlocked: (activityStats?.sessionCount || 0) > 0 },
     { id: 'streak-3', icon: '🔥', name: '3-Day Streak', unlocked: (activityStats?.streak || 0) >= 3 },
     { id: 'streak-7', icon: '⚡', name: '7-Day Streak', unlocked: (activityStats?.streak || 0) >= 7 },
     { id: 'protein-100', icon: '🥩', name: '100g Protein', unlocked: (mealSummary?.totalProtein || 0) >= 100 },
     { id: 'step-5k', icon: '👟', name: '5K Steps', unlocked: (activityStats?.totalSteps || 0) >= 5000 },
     { id: 'hydrated', icon: '💧', name: 'Hydrated', unlocked: state.waterGlasses >= 8 },
     { id: 'complete-profile', icon: '✅', name: 'Profile Done', unlocked: Boolean(user?.city && user?.healthProfile?.weightKg && (user?.sportsPrefs || []).length > 0) },
-    { id: 'calorie-goal', icon: '🎯', name: 'Calorie Goal', unlocked: (mealSummary?.totalCalories || 0) >= (user?.goals?.dailyCalories || 9999) },
+    { id: 'calorie-goal', icon: '🎯', name: 'Calorie Goal', unlocked: (mealSummary?.totalCalories || 0) >= (user?.goals?.dailyCalorieTarget || 9999) },
     { id: 'early-bird', icon: '🌅', name: 'Early Bird', unlocked: new Date().getHours() < 8 },
     { id: 'night-owl', icon: '🦉', name: 'Night Owl', unlocked: new Date().getHours() >= 22 },
     { id: 'social', icon: '🏏', name: 'Social Player', unlocked: (user?.sportsPrefs || []).length >= 3 },
@@ -281,6 +696,22 @@ function computeBadges(user, mealSummary, activityStats) {
 }
 
 function pushNotification(title, message, level = 'info') {
+  // Native local notification on Capacitor
+  try {
+    if (window?.Capacitor?.isNativePlatform?.() && window.Capacitor.Plugins?.LocalNotifications) {
+      window.Capacitor.Plugins.LocalNotifications.schedule({
+        notifications: [{
+          title,
+          body: message,
+          id: Math.floor(Math.random() * 100000),
+          schedule: { at: new Date(Date.now() + 100) },
+          sound: null,
+          smallIcon: 'ic_launcher',
+        }],
+      }).catch(() => {});
+    }
+  } catch (_) {}
+
   if (state.token) {
     loadNotifications().catch(() => {});
     return;
@@ -409,9 +840,12 @@ async function setupGoogleLogin() {
 }
 
 function setAuthVisible(visible) {
-  const panel = el('authPanel');
-  if (!panel) return;
-  panel.classList.toggle('hidden', !visible);
+  const gate = el('authGate');
+  const shell = el('appShell');
+  const panel = el('authPanel'); // legacy compat
+  if (gate) gate.classList.toggle('hidden', !visible);
+  if (shell) shell.classList.toggle('hidden', visible);
+  if (panel) panel.classList.add('hidden'); // always keep old panel hidden
 }
 
 function setView(name) {
@@ -496,6 +930,27 @@ function renderDashboardActions({ insights, pendingPayments }) {
       </div>
       <span class="action-chevron">›</span>
     </div>
+
+    <!-- Route Builder Map -->
+    <div class="card">
+      <h3>🗺 Route Builder</h3>
+      <p class="muted" style="margin:4px 0 10px;">For running/walking/cycling: enable builder, tap map to place waypoints, then start activity to overlay live GPS.</p>
+      <div id="trkMap" style="height:260px;border-radius:14px;border:1px solid var(--border);overflow:hidden;background:#E9EEF5;"></div>
+      <p id="rbMapStatus" class="muted" style="margin-top:8px;">Loading map...</p>
+      <div class="toolbar" style="margin-top:8px;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;">
+        <button id="toggleRouteBuilderBtn" class="btn btn-outline">Enable Builder</button>
+        <button id="clearRouteBtn" class="btn btn-outline">Clear Route</button>
+      </div>
+      <div class="toolbar" style="margin-top:8px;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;">
+        <button id="buildRoadRouteBtn" class="btn btn-primary">Smart Route</button>
+        <button id="usePlannedDistanceBtn" class="btn btn-ok">Use Planned Distance</button>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:space-between;margin-top:8px;font-size:.72rem;color:var(--text-muted);">
+        <span>Waypoints: <strong id="rbPointCount">0</strong></span>
+        <span>Planned KM: <strong id="rbPlanKm">0.00</strong></span>
+        <span id="rbMode">Builder is off</span>
+      </div>
+    </div>
   `).join('')}</div>`;
 
   qa('[data-dashboard-action]').forEach((btn) => {
@@ -549,7 +1004,7 @@ async function ensurePushEnabled() {
 function healthScore({ mealSummary, activityStats }) {
   const calories = Number(mealSummary?.totalCalories || 0);
   const protein = Number(mealSummary?.totalProtein || 0);
-  const sessions = Number(activityStats?.sessionsCount || 0);
+  const sessions = Number(activityStats?.sessionCount || 0);
   const streak = Number(activityStats?.streak || 0);
   const calorieScore = Math.max(0, 40 - Math.abs(2200 - calories) / 55);
   const proteinScore = Math.min(20, protein / 2.5);
@@ -588,8 +1043,8 @@ function renderOnboarding(user) {
       <h3>Goals</h3>
       <div class="form-grid">
         <input id="obGoalWeight" type="number" placeholder="Target Weight (kg)" value="${user?.goals?.targetWeight || ''}" />
-        <input id="obGoalCalories" type="number" placeholder="Daily Calories Goal" value="${user?.goals?.dailyCalories || ''}" />
-        <input id="obGoalSteps" type="number" placeholder="Daily Steps Goal" value="${user?.goals?.dailySteps || ''}" />
+        <input id="obGoalCalories" type="number" placeholder="Daily Calories Goal" value="${user?.goals?.dailyCalorieTarget || ''}" />
+        <input id="obGoalSteps" type="number" placeholder="Daily Steps Goal" value="${user?.goals?.dailyStepTarget || ''}" />
       </div>
     </div>
     <div class="card">
@@ -615,8 +1070,8 @@ function renderOnboarding(user) {
     try {
       const goals = {
         targetWeight: Number(el('obGoalWeight').value || 0),
-        dailyCalories: Number(el('obGoalCalories').value || 0),
-        dailySteps: Number(el('obGoalSteps').value || 0),
+        dailyCalorieTarget: Number(el('obGoalCalories').value || 0),
+        dailyStepTarget: Number(el('obGoalSteps').value || 0),
       };
       const payload = {
         language: el('obLang').value,
@@ -656,7 +1111,7 @@ function renderProfile(user) {
       <div style="font-size:.78rem;color:var(--text-3);">${user?.city || 'India'} • ${user?.language || 'en'}</div>
       <div style="display:flex;justify-content:center;gap:32px;margin:16px 0;">
         <div><div style="font-size:1.1rem;font-weight:800;color:var(--text);">${(user?.sportsPrefs || []).length}</div><div style="font-size:0.68rem;color:var(--text-muted);">Sports</div></div>
-        <div><div style="font-size:1.1rem;font-weight:800;color:var(--text);">${user?.goals?.dailySteps || 0}</div><div style="font-size:0.68rem;color:var(--text-muted);">Step Goal</div></div>
+        <div><div style="font-size:1.1rem;font-weight:800;color:var(--text);">${user?.goals?.dailyStepTarget || 0}</div><div style="font-size:0.68rem;color:var(--text-muted);">Step Goal</div></div>
       </div>
     </div>
 
@@ -667,7 +1122,7 @@ function renderProfile(user) {
         <div class="pill-label">Goal Weight</div>
       </div>
       <div class="stat-pill mint-pill">
-        <div class="pill-value">${user?.goals?.dailyCalories || '–'} <span class="pill-unit">kcal</span></div>
+        <div class="pill-value">${user?.goals?.dailyCalorieTarget || '–'} <span class="pill-unit">kcal</span></div>
         <div class="pill-label">Daily Calories</div>
       </div>
       <div class="stat-pill blue-pill">
@@ -689,9 +1144,9 @@ function renderProfile(user) {
         <input id="pSports" value="${(user?.sportsPrefs || []).join(', ')}" placeholder="Sports (comma separated)" />
         <div class="grid two">
           <input id="pGoalWeight" type="number" value="${user?.goals?.targetWeight || ''}" placeholder="Target Weight (kg)" />
-          <input id="pGoalCalories" type="number" value="${user?.goals?.dailyCalories || ''}" placeholder="Daily Calories" />
+          <input id="pGoalCalories" type="number" value="${user?.goals?.dailyCalorieTarget || ''}" placeholder="Daily Calories" />
         </div>
-        <input id="pGoalSteps" type="number" value="${user?.goals?.dailySteps || ''}" placeholder="Daily Steps Goal" />
+        <input id="pGoalSteps" type="number" value="${user?.goals?.dailyStepTarget || ''}" placeholder="Daily Steps Goal" />
         <div class="grid two">
           <input id="pAge" type="number" min="1" max="120" value="${user?.healthProfile?.age || ''}" placeholder="Age" />
           <input id="pHeight" type="number" min="50" max="250" value="${user?.healthProfile?.heightCm || ''}" placeholder="Height (cm)" />
@@ -764,8 +1219,8 @@ function renderProfile(user) {
         },
         goals: {
           targetWeight: Number(el('pGoalWeight').value || 0),
-          dailyCalories: Number(el('pGoalCalories').value || 0),
-          dailySteps: Number(el('pGoalSteps').value || 0),
+          dailyCalorieTarget: Number(el('pGoalCalories').value || 0),
+          dailyStepTarget: Number(el('pGoalSteps').value || 0),
         },
       };
       await api('/api/users/profile', { method: 'PUT', body: JSON.stringify(payload) });
@@ -865,7 +1320,7 @@ function renderMeals(foods, meals, summary) {
     </div>
   `).join('');
 
-  const goalCal = state.user?.goals?.dailyCalories || 2200;
+  const goalCal = state.user?.goals?.dailyCalorieTarget || 2200;
   const calPct = Math.min(100, Math.round(((summary.totalCalories || 0) / goalCal) * 100));
   const calLeft = Math.max(0, goalCal - (summary.totalCalories || 0));
   const protPct = Math.min(100, Math.round(((summary.totalProtein || 0) / 120) * 100));
@@ -917,6 +1372,26 @@ function renderMeals(foods, meals, summary) {
       </div>
     </div>
 
+    <!-- Camera Food Scanner -->
+    <div class="card" style="background:linear-gradient(135deg,#7B61FF22,#FF6B2B22);border:1px solid #7B61FF44;">
+      <h3>📸 Scan Food Photo</h3>
+      <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:10px;">Take a photo of your food and AI will detect items & calories instantly</p>
+      <div class="form-grid">
+        <input type="file" id="foodPhotoInput" accept="image/*" capture="environment" style="display:none;" />
+        <div id="photoPreviewWrap" style="display:none;text-align:center;margin-bottom:8px;">
+          <img id="photoPreview" style="max-width:100%;max-height:200px;border-radius:12px;object-fit:cover;" />
+        </div>
+        <div class="toolbar">
+          <button id="takePhotoBtn" class="btn btn-primary" style="flex:1;">📷 Take Photo</button>
+          <button id="scanPhotoBtn" class="btn btn-ok" style="flex:1;" disabled>🔬 Analyze</button>
+        </div>
+        <div id="scanResults" style="display:none;">
+          <div id="scanResultsContent"></div>
+          <button id="addScannedMealBtn" class="btn btn-primary" style="width:100%;margin-top:8px;" disabled>Add All Detected Items</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Add Meal -->
     <div class="card">
       <h3>Add Meal</h3>
@@ -951,6 +1426,112 @@ function renderMeals(foods, meals, summary) {
     <div class="card"><h3>Today's Meals</h3><div class="list">${mealItems || '<p class="muted" style="text-align:center;padding:20px 0;">No meals logged yet. Start tracking! 🍛</p>'}</div></div>
   `;
 
+  // --- Camera food scanner handlers ---
+  let scannedItems = [];
+
+  el('takePhotoBtn')?.addEventListener('click', () => {
+    el('foodPhotoInput')?.click();
+  });
+
+  el('foodPhotoInput')?.addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const preview = el('photoPreview');
+      const wrap = el('photoPreviewWrap');
+      if (preview) preview.src = reader.result;
+      if (wrap) wrap.style.display = 'block';
+      el('scanPhotoBtn').disabled = false;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  el('scanPhotoBtn')?.addEventListener('click', async () => {
+    const preview = el('photoPreview');
+    if (!preview?.src) return toast('Take a photo first');
+    const btn = el('scanPhotoBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Analyzing...';
+    try {
+      const base64 = preview.src;
+      const data = await api('/api/coach/analyze-photo', {
+        method: 'POST',
+        body: JSON.stringify({ image: base64 }),
+      });
+      const analysis = data.analysis || data;
+      scannedItems = analysis.items || [];
+      const resultsDiv = el('scanResults');
+      const content = el('scanResultsContent');
+      if (resultsDiv) resultsDiv.style.display = 'block';
+      if (content) {
+        if (scannedItems.length === 0) {
+          content.innerHTML = '<p class="muted">Could not detect any food items. Try a clearer photo.</p>';
+        } else {
+          const healthScoreVal = analysis.healthScore || '—';
+          const tips = (analysis.tips || []).join(' · ');
+          content.innerHTML = `
+            <div style="margin-bottom:8px;font-size:.82rem;">
+              <strong>Health Score:</strong> <span style="color:var(--green);font-weight:700;">${healthScoreVal}/10</span>
+              ${tips ? `<br><em style="color:var(--text-muted);font-size:.72rem;">${tips}</em>` : ''}
+            </div>
+            ${scannedItems.map((item) => `
+              <div class="item" style="padding:8px 10px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <div>
+                    <strong>${item.name}</strong>
+                    <span style="font-size:.72rem;color:var(--text-muted);margin-left:6px;">${item.confidence ? Math.round(item.confidence) + '%' : ''}</span>
+                  </div>
+                  <span style="font-weight:700;color:var(--amber);">${item.calories || 0} cal</span>
+                </div>
+                <div style="font-size:.72rem;color:var(--text-muted);">P:${item.protein || 0}g  C:${item.carbs || 0}g  F:${item.fat || 0}g</div>
+              </div>
+            `).join('')}
+          `;
+          el('addScannedMealBtn').disabled = false;
+        }
+      }
+      toast(`Detected ${scannedItems.length} food items`);
+    } catch (err) {
+      toast(err.message || 'Photo analysis failed');
+    } finally {
+      btn.textContent = '🔬 Analyze';
+      btn.disabled = false;
+    }
+  });
+
+  el('addScannedMealBtn')?.addEventListener('click', async () => {
+    if (!scannedItems.length) return toast('No scanned items to add');
+    try {
+      const items = scannedItems.map((item) => ({
+        name: item.name,
+        quantity: 1,
+        calories: Number(item.calories || 0),
+        protein: Number(item.protein || 0),
+        carbs: Number(item.carbs || 0),
+        fat: Number(item.fat || 0),
+        fiber: Number(item.fiber || 0),
+        unit: 'serving',
+      }));
+      const payload = {
+        date: el('mealDate')?.value || new Date().toISOString().slice(0, 10),
+        mealType: el('mealType')?.value || 'lunch',
+        items,
+      };
+      await api('/api/meals', { method: 'POST', body: JSON.stringify(payload) });
+      pushNotification('Meal Scanned', `${items.length} items added from photo scan.`, 'success');
+      toast(`${items.length} items added from photo`);
+      scannedItems = [];
+      el('scanResults').style.display = 'none';
+      el('photoPreviewWrap').style.display = 'none';
+      await loadMeals();
+      await loadDashboard();
+    } catch (err) {
+      toast(err.message);
+    }
+  });
+
+  // --- Existing meal handlers ---
   el('foodSearchBtn')?.addEventListener('click', async () => {
     const qText = el('foodSearchInput').value.trim();
     if (!qText || qText.length < 2) return toast('Enter at least 2 letters');
@@ -1040,12 +1621,21 @@ function activityTypeOptions(selected = 'running') {
 
 function renderActivities(payload, stats) {
   const target = el('activities');
+  if (activityTracker.map) {
+    try { activityTracker.map.remove(); } catch (_) {}
+    activityTracker.map = null;
+    activityTracker.mapReady = false;
+    activityTracker.livePolyline = null;
+    activityTracker.plannedPolyline = null;
+    activityTracker.currentMarker = null;
+    activityTracker.routeMarkers = [];
+  }
   const activities = payload.activities || [];
   const activityRows = activities.map((a) => `
     <div class="item">
       <h4>${a.type === 'running' ? '🏃' : a.type === 'cycling' ? '🚴' : a.type === 'yoga' ? '🧘' : a.type === 'swimming' ? '🏊' : '💪'} ${a.type} · ${a.durationMinutes} min</h4>
-      <p>${a.date} · ${a.caloriesBurned || 0} cal · ${a.distanceKm || 0} km</p>
-      <span class="pill">${a.gpsRoute?.length ? '📍 GPS' : '✏️ Manual'}</span>
+      <p>${String(a.date || '').slice(0, 10)} · ${a.caloriesBurned || 0} cal · ${a.distanceKm || 0} km</p>
+      <span class="pill">${a.gpsRoute?.length ? '📍 GPS' : '✏️ Manual'}${a.pendingSync ? ' · ⏳ Pending Sync' : a.localOnly ? ' · 📱 Local' : ''}</span>
     </div>
   `).join('');
 
@@ -1082,7 +1672,7 @@ function renderActivities(payload, stats) {
           <circle class="cr-ring-bg" cx="75" cy="75" r="60"/>
           <circle class="cr-ring-fill" cx="75" cy="75" r="60"
             stroke-dasharray="${2 * Math.PI * 60}"
-            stroke-dashoffset="${2 * Math.PI * 60 * (1 - Math.min(1, (stats.totalCalories || 0) / Math.max(1, state.user?.goals?.dailyCalories || 500)))}"
+            stroke-dashoffset="${2 * Math.PI * 60 * (1 - Math.min(1, (stats.totalCalories || 0) / Math.max(1, state.user?.goals?.dailyCalorieTarget || 500)))}"
             transform="rotate(-90 75 75)"/>
         </svg>
         <div class="cr-ring-center">
@@ -1101,9 +1691,9 @@ function renderActivities(payload, stats) {
     <div class="card" style="text-align:center;">
       <h3>Activity Stats</h3>
       <div style="display:flex;justify-content:space-around;padding:12px 0;">
-        <div><div style="font-size:1.5rem;font-weight:800;color:#7B61FF;">${stats.totalDuration || 0}</div><div class="label">Minutes</div></div>
+        <div><div style="font-size:1.5rem;font-weight:800;color:#7B61FF;">${stats.totalMinutes || 0}</div><div class="label">Minutes</div></div>
         <div><div style="font-size:1.5rem;font-weight:800;color:#FF6B2B;">${stats.totalCalories || 0}</div><div class="label">Burned</div></div>
-        <div><div style="font-size:1.5rem;font-weight:800;color:#25C569;">${stats.sessionsCount || 0}</div><div class="label">Sessions</div></div>
+        <div><div style="font-size:1.5rem;font-weight:800;color:#25C569;">${stats.sessionCount || 0}</div><div class="label">Sessions</div></div>
         <div><div style="font-size:1.5rem;font-weight:800;color:#FFB020;">${stats.streak || 0}</div><div class="label">Streak</div></div>
       </div>
     </div>
@@ -1135,6 +1725,7 @@ function renderActivities(payload, stats) {
   `;
 
   updateActivityTrackerUi();
+  initActivityMap();
 
   el('captureGpsBtn')?.addEventListener('click', async () => {
     if (!navigator.geolocation) return toast('Geolocation not supported');
@@ -1145,6 +1736,12 @@ function renderActivities(payload, stats) {
         el('gpsLat').value = String(position.coords.latitude);
         el('gpsLng').value = String(position.coords.longitude);
         status.textContent = `GPS captured: ${position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)}`;
+        activityTracker.lastPoint = {
+          lat: Number(position.coords.latitude),
+          lng: Number(position.coords.longitude),
+          timestamp: new Date().toISOString(),
+        };
+        drawLiveRouteOnMap();
       },
       () => {
         status.textContent = 'Failed to capture GPS';
@@ -1153,22 +1750,95 @@ function renderActivities(payload, stats) {
     );
   });
 
+  el('toggleRouteBuilderBtn')?.addEventListener('click', () => {
+    activityTracker.routeBuilderEnabled = !activityTracker.routeBuilderEnabled;
+    const btn = el('toggleRouteBuilderBtn');
+    const status = el('rbMapStatus');
+    if (btn) btn.textContent = activityTracker.routeBuilderEnabled ? 'Disable Builder' : 'Enable Builder';
+    if (status) status.textContent = activityTracker.routeBuilderEnabled
+      ? 'Builder ON: tap map to add waypoints.'
+      : 'Builder OFF: enable builder to design route.';
+    updateRouteBuilderUi();
+  });
+
+  el('clearRouteBtn')?.addEventListener('click', () => {
+    clearPlannedRoute();
+    toast('Planned route cleared');
+  });
+
+  el('buildRoadRouteBtn')?.addEventListener('click', async () => {
+    await buildRoadRouteFromWaypoints();
+  });
+
+  el('usePlannedDistanceBtn')?.addEventListener('click', () => {
+    const km = plannedRouteDistanceKm(activityTracker.plannedRoute);
+    if (km <= 0) {
+      toast('Build a route with at least 2 waypoints');
+      return;
+    }
+    const distanceInput = el('actDistance');
+    if (distanceInput) distanceInput.value = km.toFixed(2);
+    toast(`Planned distance applied: ${km.toFixed(2)} km`);
+  });
+
   el('addActivityBtn')?.addEventListener('click', async () => {
     try {
       const lat = Number(el('gpsLat').value || 0);
       const lng = Number(el('gpsLng').value || 0);
+      const hasTrackerRoute = Array.isArray(activityTracker.route) && activityTracker.route.length > 0;
+      const routeFromCapture = lat && lng ? [{ lat, lng, timestamp: new Date().toISOString() }] : [];
+      const routeToSend = hasTrackerRoute ? activityTracker.route.slice(-400) : routeFromCapture;
+      const stepsToSend = Number(activityTracker.stepCount || 0);
+      const durationToSend = Number(el('actDuration').value || 0);
+      const distanceToSend = Number(el('actDistance').value || 0);
+      const caloriesToSend = Number(el('actCalories').value || 0);
+
+      if (durationToSend <= 0 && distanceToSend <= 0 && stepsToSend <= 0) {
+        toast('Start tracker or enter a real activity before syncing');
+        return;
+      }
+
+      const activityType = String(el('actType').value || '').toLowerCase();
+      const gpsRequired = ['running', 'walking', 'cycling'].includes(activityType);
+      if (gpsRequired && !routeToSend.length) {
+        toast('Capture GPS or start live tracking for this activity type');
+        return;
+      }
+
       const payloadToSend = {
-        type: el('actType').value,
-        durationMinutes: Number(el('actDuration').value || 0),
-        caloriesBurned: Number(el('actCalories').value || 0),
-        distanceKm: Number(el('actDistance').value || 0),
+        type: activityType,
+        durationMinutes: durationToSend,
+        caloriesBurned: caloriesToSend,
+        distanceKm: distanceToSend,
+        steps: stepsToSend,
         notes: el('actNotes').value || '',
         date: new Date().toISOString().slice(0, 10),
-        gpsRoute: lat && lng ? [{ lat, lng, timestamp: new Date().toISOString() }] : [],
+        gpsRoute: routeToSend,
+        plannedRoute: activityTracker.plannedRoute.slice(0, 800),
+        plannedDistanceKm: plannedRouteDistanceKm(activityTracker.plannedRoute),
+        source: 'mobile_tracker',
       };
-      await api('/api/activities', { method: 'POST', body: JSON.stringify(payloadToSend) });
-      pushNotification('Activity Logged', `${payloadToSend.type} activity recorded.`, 'success');
-      toast('Activity logged');
+
+      const localActivity = upsertLocalActivity({
+        ...payloadToSend,
+        createdAt: new Date().toISOString(),
+        pendingSync: true,
+        localOnly: true,
+      });
+
+      try {
+        await api('/api/activities', { method: 'POST', body: JSON.stringify(payloadToSend) });
+        markLocalActivitySynced(localActivity.localId);
+        removeQueuedActivity(localActivity.localId);
+        pushNotification('Activity Logged', `${payloadToSend.type} activity recorded.`, 'success');
+        toast('Activity logged and synced');
+      } catch (syncErr) {
+        queueActivityForSync(localActivity.localId, payloadToSend);
+        markLocalActivitySyncError(localActivity.localId, syncErr.message || 'Sync pending');
+        pushNotification('Offline Saved', 'Activity saved locally and will sync automatically.', 'info');
+        toast('Saved offline. Will sync when online.');
+      }
+
       await loadActivities();
       await loadDashboard();
     } catch (err) {
@@ -1189,6 +1859,8 @@ function renderActivities(payload, stats) {
       activityTracker.route = [];
       activityTracker.lastPoint = null;
       activityTracker.type = el('actType')?.value || 'walking';
+      if (el('gpsLat')) el('gpsLat').value = '';
+      if (el('gpsLng')) el('gpsLng').value = '';
 
       if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
         const permission = await DeviceMotionEvent.requestPermission();
@@ -1198,14 +1870,41 @@ function renderActivities(payload, stats) {
         }
       }
 
+      activityTracker.magHistory = [];
+      activityTracker.filteredMag = 9.8;
+      activityTracker.lastValley = 9.8;
+      activityTracker.rising = false;
+
       activityTracker.motionBound = (event) => {
         const acc = event.accelerationIncludingGravity;
         if (!acc) return;
-        const magnitude = Math.sqrt((acc.x || 0) ** 2 + (acc.y || 0) ** 2 + (acc.z || 0) ** 2);
+        const rawMag = Math.sqrt((acc.x || 0) ** 2 + (acc.y || 0) ** 2 + (acc.z || 0) ** 2);
+        // Low-pass filter (alpha=0.15) for smoother signal
+        const alpha = 0.15;
+        activityTracker.filteredMag = alpha * rawMag + (1 - alpha) * activityTracker.filteredMag;
+        const mag = activityTracker.filteredMag;
         const now = Date.now();
-        if (magnitude > 12.2 && now - activityTracker.lastPeakAt > 320) {
-          activityTracker.stepCount += 1;
-          activityTracker.lastPeakAt = now;
+
+        // Peak detection with valley tracking
+        if (!activityTracker.rising && mag < activityTracker.lastValley) {
+          activityTracker.lastValley = mag;
+        }
+        if (!activityTracker.rising && mag > activityTracker.lastValley + activityTracker.stepThreshold) {
+          activityTracker.rising = true;
+        }
+        if (activityTracker.rising && mag < activityTracker.lastValley + activityTracker.stepThreshold * 0.6) {
+          // Crossed back down – count step if enough time passed
+          if (now - activityTracker.lastPeakAt > activityTracker.stepRefractory) {
+            activityTracker.stepCount += 1;
+            activityTracker.lastPeakAt = now;
+            // Estimate distance from stride ONLY when GPS is not active
+            if (!activityTracker.lastPoint) {
+              const stride = activityTracker.type === 'running' ? 1.1 : 0.72;
+              activityTracker.distanceMeters += stride;
+            }
+          }
+          activityTracker.rising = false;
+          activityTracker.lastValley = mag;
         }
       };
       window.addEventListener('devicemotion', activityTracker.motionBound);
@@ -1229,6 +1928,10 @@ function renderActivities(payload, stats) {
             el('gpsLng').value = String(point.lng);
             const gpsStatus = el('gpsStatus');
             if (gpsStatus) gpsStatus.textContent = `GPS live: ${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}`;
+            drawLiveRouteOnMap();
+            if (activityTracker.map && activityTracker.running) {
+              try { activityTracker.map.panTo([point.lat, point.lng], { animate: true, duration: 0.25 }); } catch (_) {}
+            }
             updateActivityTrackerUi();
           },
           () => {
@@ -1278,7 +1981,11 @@ function renderActivities(payload, stats) {
 
     const currentNotes = el('actNotes').value || '';
     const stepNote = `Steps: ${activityTracker.stepCount}`;
-    el('actNotes').value = currentNotes.includes('Steps:') ? currentNotes : `${currentNotes}${currentNotes ? ' | ' : ''}${stepNote}`;
+    const sensorTag = 'Sensor: mobile_tracker';
+    let nextNotes = currentNotes;
+    if (!nextNotes.includes('Steps:')) nextNotes = `${nextNotes}${nextNotes ? ' | ' : ''}${stepNote}`;
+    if (!nextNotes.includes(sensorTag)) nextNotes = `${nextNotes}${nextNotes ? ' | ' : ''}${sensorTag}`;
+    el('actNotes').value = nextNotes;
 
     toast('Tracker details applied to activity form');
   });
@@ -1420,7 +2127,7 @@ function renderCoach() {
 
   el('generateWorkoutBtn')?.addEventListener('click', async () => {
     try {
-      const data = await api('/api/coach/workout-plan', {
+      const data = await api('/api/coach/workout', {
         method: 'POST',
         body: JSON.stringify({
           goals: el('coachGoals').value || 'general fitness',
@@ -1438,7 +2145,7 @@ function renderCoach() {
 
   el('generateDietBtn')?.addEventListener('click', async () => {
     try {
-      const data = await api('/api/coach/diet-plan', {
+      const data = await api('/api/coach/diet', {
         method: 'POST',
         body: JSON.stringify({
           calorieGoal: Number(el('coachCalories').value || 2000),
@@ -1669,7 +2376,7 @@ function renderEvents(events, bookings) {
 
 function renderReferrals(ref, leaderboard) {
   const target = el('referrals');
-  const leaderRows = leaderboard.map((l, i) => `<div class="item"><h4>${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '🏅'} ${l.userId?.name || 'User'} · <span class="code">${l.code}</span></h4><p>${l.totalReferrals} referrals · ${l.pointsEarned} pts</p></div>`).join('');
+  const leaderRows = leaderboard.map((l, i) => `<div class="item"><h4>${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '🏅'} ${l.userId?.name || 'User'} · <span class="code">${l.referralCode}</span></h4><p>${l.totalReferrals} referrals · ${l.pointsEarned} pts</p></div>`).join('');
   target.innerHTML = `
     <div class="card" style="text-align:center;">
       <h3>🎁 Referrals & Points</h3>
@@ -1677,7 +2384,7 @@ function renderReferrals(ref, leaderboard) {
         <div><div style="font-size:1.4rem;font-weight:800;color:var(--orange);">${ref?.pointsEarned || 0}</div><div class="label">Points</div></div>
         <div><div style="font-size:1.4rem;font-weight:800;color:var(--green);">${ref?.totalReferrals || 0}</div><div class="label">Referrals</div></div>
       </div>
-      <p class="muted">Your code: <span class="code" style="font-size:1.1rem;">${ref?.code || '-'}</span></p>
+      <p class="muted">Your code: <span class="code" style="font-size:1.1rem;">${ref?.referralCode || '-'}</span></p>
       <div class="toolbar" style="margin-top:12px;">
         <input id="applyCodeInput" placeholder="Enter referral code" />
         <button id="applyCodeBtn" class="btn btn-primary">Apply Code</button>
@@ -1836,10 +2543,27 @@ async function loadMeals() {
 
 async function loadActivities() {
   if (!state.token) return;
-  const [payload, stats] = await Promise.all([
+  const localActivities = getLocalActivities();
+  const [remotePayload, remoteStats] = await Promise.all([
     api('/api/activities?limit=20').catch(() => ({ activities: [] })),
     api('/api/activities/stats?period=week').catch(() => ({})),
   ]);
+
+  const mergedActivities = mergeActivitiesForView(remotePayload.activities || [], localActivities);
+  const fallbackStats = computeActivityStatsFromList(mergedActivities);
+  const stats = {
+    ...fallbackStats,
+    ...remoteStats,
+    totalMinutes: Number(remoteStats.totalMinutes ?? fallbackStats.totalMinutes),
+    totalCalories: Number(remoteStats.totalCalories ?? fallbackStats.totalCalories),
+    totalDistance: Number(remoteStats.totalDistance ?? fallbackStats.totalDistance),
+    totalSteps: Number(remoteStats.totalSteps ?? fallbackStats.totalSteps),
+    sessionCount: Number(remoteStats.sessionCount ?? fallbackStats.sessionCount),
+    streak: Number(remoteStats.streak ?? fallbackStats.streak),
+    lastActivityType: remoteStats.lastActivityType || fallbackStats.lastActivityType,
+  };
+
+  const payload = { ...remotePayload, activities: mergedActivities };
   renderActivities(payload, stats);
   return { payload, stats };
 }
@@ -1900,12 +2624,22 @@ async function loadNotifications() {
 async function loadDashboard() {
   if (!state.token) return;
   const date = new Date().toISOString().slice(0, 10);
-  const [insights, bookingsResp] = await Promise.all([
+  const [insights, bookingsResp, fullActivityStats] = await Promise.all([
     api(`/api/insights/dashboard?date=${date}`).catch(() => ({})),
     api('/api/events/my/bookings').catch(() => ({ data: [] })),
+    api('/api/activities/stats?period=week').catch(() => ({})),
   ]);
   const mealSummary = insights.mealSummary || {};
-  const activityStats = insights.activityStats || {};
+  const localActivityStats = computeActivityStatsFromList(getLocalActivities());
+  const activityStats = {
+    ...(insights.activityStats || {}),
+    totalMinutes: fullActivityStats.totalMinutes ?? localActivityStats.totalMinutes ?? (insights.activityStats?.totalDuration || 0),
+    totalSteps: fullActivityStats.totalSteps ?? localActivityStats.totalSteps ?? 0,
+    totalDistance: fullActivityStats.totalDistance ?? localActivityStats.totalDistance ?? 0,
+    totalCalories: fullActivityStats.totalCalories ?? localActivityStats.totalCalories ?? (insights.activityStats?.totalCalories || 0),
+    sessionCount: fullActivityStats.sessionCount ?? localActivityStats.sessionCount ?? (insights.activityStats?.sessionsCount || 0),
+    lastActivityType: fullActivityStats.lastActivityType || localActivityStats.lastActivityType || '',
+  };
   const pendingPayments = (bookingsResp.data || []).filter((b) => b.status === 'pending' && b.paymentStatus === 'pending').length;
 
   const userName = state.user?.name || 'there';
@@ -1929,15 +2663,14 @@ async function loadDashboard() {
   const scoreVal = insights.healthScore || healthScore({ mealSummary, activityStats });
 
   const totalCal = mealSummary.totalCalories || 0;
-  const goalCal = state.user?.goals?.dailyCalories || 2200;
+  const goalCal = state.user?.goals?.dailyCalorieTarget || 2200;
   const calLeft = Math.max(0, goalCal - totalCal);
   const calPct = Math.min(100, Math.round((totalCal / goalCal) * 100));
   const totalSteps = activityStats.totalSteps || activityTracker.stepCount || 0;
   const totalDist = activityStats.totalDistance || Number((activityTracker.distanceMeters / 1000).toFixed(1)) || 0;
-  const totalDur = activityStats.totalDuration || 0;
+  const totalDur = activityStats.totalMinutes || 0;
   const totalBurned = activityStats.totalCalories || 0;
   // Build 7 faux chart bars from calorie data
-  const barMax = Math.max(goalCal, totalCal, 1);
   const fakeBars = [.35,.55,.45,.7,.6, calPct/100, .2].map((v,i) => {
     const h = Math.max(6, Math.round(v * 70));
     const cls = i === 5 ? 'orange' : 'light';
@@ -1959,10 +2692,10 @@ async function loadDashboard() {
     </div>
 
     <!-- Motivational Quote -->
-    <div class="quote-banner">
-      <div class="quote-text">${getRandomQuote().text}</div>
-      <div class="quote-author">— ${getRandomQuote().author}</div>
-    </div>
+    ${(() => { const _q = getRandomQuote(); return `<div class="quote-banner">
+      <div class="quote-text">${_q.text}</div>
+      <div class="quote-author">— ${_q.author}</div>
+    </div>`; })()}
 
     <!-- Health Score Hero -->
     <div class="health-score-hero">
@@ -2004,9 +2737,9 @@ async function loadDashboard() {
 
     <!-- Workout Hero Card (dark) -->
     <div class="workout-hero">
-      <span class="wh-badge">${activityStats.sessionsCount || 0} TOTAL</span>
+      <span class="wh-badge">${activityStats.sessionCount || 0} TOTAL</span>
       <div class="wh-body">
-        <h3>${activityStats.sessionsCount > 0 ? 'Keep Going!' : 'Start Workout'}</h3>
+        <h3>${activityStats.sessionCount > 0 ? 'Keep Going!' : 'Start Workout'}</h3>
         <div class="wh-sub">With AI Coach · KheloFit</div>
         <div class="wh-stats">
           <div class="wh-stat-item"><div class="wh-stat-val">${totalDur}min</div><div class="wh-stat-label">Time</div></div>
@@ -2050,7 +2783,7 @@ async function loadDashboard() {
       </div>
       <div class="stat-card amber-b">
         <div class="stat-label">Activities</div>
-        <div class="stat-value" id="statActivities">${activityStats.sessionsCount || 0}</div>
+        <div class="stat-value" id="statActivities">${activityStats.sessionCount || 0}</div>
       </div>
       <div class="stat-card mint-b">
         <div class="stat-label">Events</div>
@@ -2151,6 +2884,7 @@ async function loadPushConfig() {
 
 async function refreshAll() {
   if (!state.token) return;
+  await syncQueuedActivities(false).catch(() => ({}));
   await loadUser();
   await Promise.all([
     loadPushConfig(),
@@ -2210,6 +2944,9 @@ function wireAuth() {
       pushNotification('Welcome', 'Email authentication successful.', 'success');
       toast('Authenticated');
       await refreshAll();
+      setView('dashboard');
+      const profileIncomplete = !state.user?.name || !state.user?.city || !Array.isArray(state.user?.sportsPrefs) || state.user.sportsPrefs.length === 0;
+      if (profileIncomplete) setView('onboarding');
     } catch (err) {
       toast(err.message);
     }
@@ -2218,19 +2955,111 @@ function wireAuth() {
   setupGoogleLogin();
 }
 
+// ─── GLOBAL ERROR LOGGER (sends client errors to server in real-time) ───
+(function initErrorLogger() {
+  const ERROR_ENDPOINT = `${API_BASE}/api/errors`;
+  const _queue = [];
+  let _sending = false;
+
+  function getPlatform() {
+    try { return window.Capacitor?.isNativePlatform?.() ? 'android' : 'web'; } catch (_) { return 'web'; }
+  }
+
+  function sendError(payload) {
+    payload.platform = payload.platform || getPlatform();
+    payload.userAgent = navigator.userAgent;
+    payload.appVersion = '2.0';
+    _queue.push(payload);
+    _flush();
+  }
+
+  async function _flush() {
+    if (_sending || _queue.length === 0) return;
+    _sending = true;
+    while (_queue.length) {
+      const item = _queue.shift();
+      try {
+        const headers = { 'Content-Type': 'application/json' };
+        const token = localStorage.getItem('kf_token');
+        if (token) headers.Authorization = `Bearer ${token}`;
+        await fetch(ERROR_ENDPOINT, { method: 'POST', headers, body: JSON.stringify(item) });
+      } catch (_) { /* network down — drop silently */ }
+    }
+    _sending = false;
+  }
+
+  // 1. Uncaught exceptions
+  window.onerror = function (msg, url, line, col, err) {
+    sendError({
+      message: String(msg),
+      stack: err?.stack || `${url}:${line}:${col}`,
+      level: 'error',
+      endpoint: window.location.hash || window.location.pathname,
+      meta: { type: 'uncaught', url, line, col },
+    });
+  };
+
+  // 2. Unhandled promise rejections
+  window.addEventListener('unhandledrejection', (e) => {
+    const reason = e.reason;
+    sendError({
+      message: reason?.message || String(reason),
+      stack: reason?.stack || '',
+      level: 'error',
+      endpoint: window.location.hash || window.location.pathname,
+      meta: { type: 'unhandledrejection' },
+    });
+  });
+
+  // 3. Console.error interception (catches library errors too)
+  const _origConsoleError = console.error;
+  console.error = function (...args) {
+    _origConsoleError.apply(console, args);
+    const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+    sendError({
+      message: msg.slice(0, 2000),
+      level: 'error',
+      endpoint: window.location.hash || window.location.pathname,
+      meta: { type: 'console.error' },
+    });
+  };
+
+  // Expose for manual use: window.logError('something broke', { component: 'meals' })
+  window.logError = function (message, meta) {
+    sendError({ message: String(message), level: 'error', meta });
+  };
+  window.logWarn = function (message, meta) {
+    sendError({ message: String(message), level: 'warn', meta });
+  };
+})();
+
 async function init() {
+  // Start gated: show auth, hide app
+  setAuthVisible(true);
+
   wireNav();
   wireAuth();
   renderNotifications();
-  setView('dashboard');
 
   // Dark mode init
   if (state.darkMode) applyDarkMode(true);
   el('darkToggle')?.addEventListener('click', () => applyDarkMode(!state.darkMode));
 
+  window.addEventListener('online', async () => {
+    if (!state.token) return;
+    const result = await syncQueuedActivities(true).catch(() => ({ synced: 0 }));
+    if (result?.synced) {
+      await loadActivities().catch(() => ({}));
+      await loadDashboard().catch(() => ({}));
+    }
+  });
+
   if (state.token) {
     try {
       await refreshAll();
+      // Token valid — reveal app
+      setAuthVisible(false);
+      setView('dashboard');
       const profileIncomplete = !state.user?.name || !state.user?.city || !Array.isArray(state.user?.sportsPrefs) || state.user.sportsPrefs.length === 0;
       if (profileIncomplete) setView('onboarding');
     } catch (err) {
